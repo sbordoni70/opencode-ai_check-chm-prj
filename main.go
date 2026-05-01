@@ -29,7 +29,7 @@ func findHhpFile(dir string) (string, error) {
 	return hhpFile, nil
 }
 
-func parseFilesSection(hhpPath string) ([]string, error) {
+func parse_HHP_Files_Section(hhpPath string) ([]string, error) {
 	f, err := os.Open(hhpPath)
 	if err != nil {
 		return nil, fmt.Errorf("cannot open %s: %w", hhpPath, err)
@@ -85,7 +85,7 @@ func addIfNew(list *[]string, set *map[string]bool, item string) {
 
 func Step01_ProcessFile_HHP(projectDir string, hhpPath string) error {
 	fmt.Printf("Step 1 - importing HHP file and checking the listed files...\n")
-	files, err := parseFilesSection(hhpPath)
+	files, err := parse_HHP_Files_Section(hhpPath)
 	if err != nil {
 		return fmt.Errorf("cannot parse %s: %w", hhpPath, err)
 	}
@@ -264,14 +264,26 @@ func main() {
 		}
 
 		fmt.Printf("HHT: %d items processed\n", processed)
-		fmt.Printf("     Total present: %d, missing: %d, unlisted: %d\n", len(present), len(missing), len(unlisted))
 	}
 
+	OutputFinalReport()
+
 	if len(missing) > 0 {
-		fmt.Printf("\nFinal: %d missing files.\n", len(missing))
 		os.Exit(2)
 	}
-	fmt.Printf("\nFinal: All files accounted for.\n")
+}
+
+func OutputFinalReport() {
+	fmt.Printf("\n--- Final Report ---\n")
+	fmt.Printf("Present files: %d\n", len(present))
+	fmt.Printf("Missing files: %d\n", len(missing))
+	for _, f := range missing {
+		fmt.Printf("  [MISSING]  %s\n", f)
+	}
+	fmt.Printf("Unlisted files: %d\n", len(unlisted))
+	for _, f := range unlisted {
+		fmt.Printf("  [UNLISTED] %s\n", f)
+	}
 }
 
 func findHhtFile(dir string) (string, error) {
