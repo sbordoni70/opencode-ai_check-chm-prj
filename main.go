@@ -65,16 +65,30 @@ func parseFilesSection(hhpPath string) ([]string, error) {
 	return files, nil
 }
 
-func ProcessHhpFile(projectDir string, hhpPath string) ([]string, []string, []string, error) {
+var (
+	present      []string
+	missing      []string
+	unlisted     []string
+	presentSet   = make(map[string]bool)
+	missingSet   = make(map[string]bool)
+	unlistedSet  = make(map[string]bool)
+)
+
+func addIfNew(list *[]string, set *map[string]bool, item string) {
+	key := strings.ToLower(item)
+	if (*set)[key] {
+		return
+	}
+	(*set)[key] = true
+	*list = append(*list, item)
+}
+
+func Step01_ProcessFile_HHP(projectDir string, hhpPath string) error {
+	fmt.Printf("Step 1 - importing HHP file and checking the listed files...\n")
 	files, err := parseFilesSection(hhpPath)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("cannot parse %s: %w", hhpPath, err)
+		return fmt.Errorf("cannot parse %s: %w", hhpPath, err)
 	}
-
-	presentMap := make(map[string]bool)
-	var present []string
-	var missing []string
-	var unlisted []string
 
 	for _, f := range files {
 		fullPath := f
@@ -82,10 +96,9 @@ func ProcessHhpFile(projectDir string, hhpPath string) ([]string, []string, []st
 			fullPath = filepath.Join(projectDir, f)
 		}
 		if _, err := os.Stat(fullPath); err == nil {
-			present = append(present, f)
-			presentMap[strings.ToLower(f)] = true
+			addIfNew(&present, &presentSet, f)
 		} else {
-			missing = append(missing, f)
+			addIfNew(&missing, &missingSet, f)
 		}
 	}
 
@@ -103,32 +116,26 @@ func ProcessHhpFile(projectDir string, hhpPath string) ([]string, []string, []st
 			return nil
 		}
 
-		if !presentMap[strings.ToLower(relPath)] {
-			unlisted = append(unlisted, relPath)
+		if !presentSet[strings.ToLower(relPath)] {
+			addIfNew(&unlisted, &unlistedSet, relPath)
 		}
 		return nil
 	})
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("error scanning project dir: %w", err)
+		return fmt.Errorf("error scanning project dir: %w", err)
 	}
 
-	return present, missing, unlisted, nil
+	return nil
 }
 
-func ProcessHhtFile(projectDir string, hhtPath string, presentList []string) ([]string, []string, int, error) {
+func Step02_ProcessFile_HHT(projectDir string, hhtPath string) (int, error) {
+	fmt.Printf("Step 2 - importing HHT file and checking the listed files...\n")
 	localRefs, err := parseLocalParams(hhtPath)
 	if err != nil {
-		return nil, nil, 0, fmt.Errorf("cannot parse %s: %w", hhtPath, err)
-	}
-
-	presentSet := make(map[string]bool)
-	for _, f := range presentList {
-		presentSet[strings.ToLower(f)] = true
+		return 0, fmt.Errorf("cannot parse %s: %w", hhtPath, err)
 	}
 
 	hhtDir := filepath.Dir(hhtPath)
-	var addedMissing []string
-	var addedUnlisted []string
 
 	for _, ref := range localRefs {
 		fullPath := ref
@@ -143,13 +150,13 @@ func ProcessHhtFile(projectDir string, hhtPath string, presentList []string) ([]
 
 		_, statErr := os.Stat(fullPath)
 		if statErr != nil {
-			addedMissing = append(addedMissing, ref)
+			addIfNew(&missing, &missingSet, ref)
 		} else if !presentSet[strings.ToLower(relPath)] {
-			addedUnlisted = append(addedUnlisted, relPath)
+			addIfNew(&unlisted, &unlistedSet, relPath)
 		}
 	}
 
-	return addedMissing, addedUnlisted, len(localRefs), nil
+	return len(localRefs), nil
 }
 
 func parseLocalParams(hhtPath string) ([]string, error) {
@@ -234,7 +241,7 @@ func main() {
 
 	fmt.Printf("Found project file: %s\n", hhpPath)
 
-	present, missing, unlisted, err := ProcessHhpFile(projectDir, hhpPath)
+	err = Step01_ProcessFile_HHP(projectDir, hhpPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -250,30 +257,14 @@ func main() {
 	if err == nil {
 		fmt.Printf("\nFound template file: %s\n", hhtPath)
 
-		addedMissing, addedUnlisted, processed, err := ProcessHhtFile(projectDir, hhtPath, present)
+		processed, err := Step02_ProcessFile_HHT(projectDir, hhtPath)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
 
 		fmt.Printf("HHT: %d items processed\n", processed)
-		if len(addedMissing) > 0 {
-			fmt.Printf("     %d added to missing:\n", len(addedMissing))
-			for _, f := range addedMissing {
-				fmt.Printf("  [MISSING]  %s\n", f)
-			}
-			missing = append(missing, addedMissing...)
-		}
-		if len(addedUnlisted) > 0 {
-			fmt.Printf("     %d added to unlisted:\n", len(addedUnlisted))
-			for _, f := range addedUnlisted {
-				fmt.Printf("  [UNLISTED] %s\n", f)
-			}
-			unlisted = append(unlisted, addedUnlisted...)
-		}
-		if len(addedMissing) == 0 && len(addedUnlisted) == 0 {
-			fmt.Printf("     All HHT references accounted for.\n")
-		}
+		fmt.Printf("     Total present: %d, missing: %d, unlisted: %d\n", len(present), len(missing), len(unlisted))
 	}
 
 	if len(missing) > 0 {
