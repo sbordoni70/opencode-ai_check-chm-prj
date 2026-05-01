@@ -29,7 +29,46 @@ func findHhpFile(dir string) (string, error) {
 	return hhpFile, nil
 }
 
-func parse_HHP_Files_Section(hhpPath string) ([]string, error) {
+func parse_HHP_section_OPTIONS(hhpPath string, entry string) (string, error) {
+	f, err := os.Open(hhpPath)
+	if err != nil {
+		return "", fmt.Errorf("cannot open %s: %w", hhpPath, err)
+	}
+	defer f.Close()
+
+	inOptions := false
+	scanner := bufio.NewScanner(f)
+
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+
+		if strings.ToUpper(line) == "[OPTIONS]" {
+			inOptions = true
+			continue
+		}
+
+		if inOptions {
+			if line == "" || (strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]")) {
+				break
+			}
+			lower := strings.ToLower(line)
+			entry := entry + "="
+			if strings.HasPrefix(lower, entry) {
+				idx := strings.Index(line, "=")
+				val := strings.TrimSpace(line[idx+1:])
+				return val, nil
+			}
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return "", fmt.Errorf("error reading %s: %w", hhpPath, err)
+	}
+
+	return "", fmt.Errorf("no Contents file entry found in [OPTIONS] section of %s", hhpPath)
+}
+
+func parse_HHP_section_FILES(hhpPath string) ([]string, error) {
 	f, err := os.Open(hhpPath)
 	if err != nil {
 		return nil, fmt.Errorf("cannot open %s: %w", hhpPath, err)
@@ -85,7 +124,7 @@ func addIfNew(list *[]string, set *map[string]bool, item string) {
 
 func Step01_ProcessFile_HHP(projectDir string, hhpPath string) error {
 	fmt.Printf("Step 1 - importing HHP file and checking the listed files...\n")
-	files, err := parse_HHP_Files_Section(hhpPath)
+	files, err := parse_HHP_section_FILES(hhpPath)
 	if err != nil {
 		return fmt.Errorf("cannot parse %s: %w", hhpPath, err)
 	}
@@ -102,9 +141,8 @@ func Step01_ProcessFile_HHP(projectDir string, hhpPath string) error {
 		}
 	}
 
-	if err != nil {
-		return fmt.Errorf("error scanning project dir: %w", err)
-	}
+	total := len(present) + len(missing)
+	fmt.Printf("    %d files listed (%d present, %d missing)\n", total, len(present), len(missing))
 
 	return nil
 }
@@ -228,11 +266,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	total := len(present) + len(missing)
-	fmt.Printf("HHP: %d files listed (%d present, %d missing)\n", total, len(present), len(missing))
-
-	hhcPath, err := findHhcFile(projectDir)
-	if err == nil {
+	hhcRelPath, err := parse_HHP_section_OPTIONS(hhpPath, "contents file")
+	if err != nil {
+		fmt.Printf("\nNo HHC file specified in HHP: %v\n", err)
+	} else {
+		hhcPath := hhcRelPath
+		if !filepath.IsAbs(hhcRelPath) {
+			hhcPath = filepath.Join(filepath.Dir(hhpPath), hhcRelPath)
+		}
 		fmt.Printf("\nFound template file: %s\n", hhcPath)
 
 		processed, err := Step02_ProcessFile_HHC(projectDir, hhcPath)
@@ -262,25 +303,4 @@ func OutputFinalReport() {
 	for _, f := range unlisted {
 		fmt.Printf("  [UNLISTED] %s\n", f)
 	}
-}
-
-func findHhcFile(dir string) (string, error) {
-	var hhcFile string
-	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if !info.IsDir() && strings.EqualFold(filepath.Ext(path), ".hhc") {
-			hhcFile = path
-			return filepath.SkipDir
-		}
-		return nil
-	})
-	if err != nil {
-		return "", err
-	}
-	if hhcFile == "" {
-		return "", fmt.Errorf("no .hhc file found in %s", dir)
-	}
-	return hhcFile, nil
 }
