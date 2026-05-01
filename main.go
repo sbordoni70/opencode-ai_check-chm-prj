@@ -8,6 +8,24 @@ import (
 	"strings"
 )
 
+var (
+	present     []string
+	missing     []string
+	unlisted    []string
+	presentSet  = make(map[string]bool)
+	missingSet  = make(map[string]bool)
+	unlistedSet = make(map[string]bool)
+)
+
+func addIfNew(list *[]string, set *map[string]bool, item string) {
+	key := strings.ToLower(item)
+	if (*set)[key] {
+		return
+	}
+	(*set)[key] = true
+	*list = append(*list, item)
+}
+
 func findHhpFile(dir string) (string, error) {
 	var hhpFile string
 	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
@@ -104,24 +122,6 @@ func parse_HHP_section_FILES(hhpPath string) ([]string, error) {
 	return files, nil
 }
 
-var (
-	present     []string
-	missing     []string
-	unlisted    []string
-	presentSet  = make(map[string]bool)
-	missingSet  = make(map[string]bool)
-	unlistedSet = make(map[string]bool)
-)
-
-func addIfNew(list *[]string, set *map[string]bool, item string) {
-	key := strings.ToLower(item)
-	if (*set)[key] {
-		return
-	}
-	(*set)[key] = true
-	*list = append(*list, item)
-}
-
 func Step01_ProcessFile_HHP(projectDir string, hhpPath string) error {
 	fmt.Printf("Step 1 - importing HHP file and checking the listed files...\n")
 	files, err := parse_HHP_section_FILES(hhpPath)
@@ -147,38 +147,7 @@ func Step01_ProcessFile_HHP(projectDir string, hhpPath string) error {
 	return nil
 }
 
-func Step02_ProcessFile_HHC(projectDir string, hhcPath string) (int, error) {
-	fmt.Printf("Step 2 - importing HHC file and checking the listed files...\n")
-	localRefs, err := parseLocalParams(hhcPath)
-	if err != nil {
-		return 0, fmt.Errorf("cannot parse %s: %w", hhcPath, err)
-	}
-
-	hhcDir := filepath.Dir(hhcPath)
-
-	for _, ref := range localRefs {
-		fullPath := ref
-		if !filepath.IsAbs(ref) {
-			fullPath = filepath.Join(hhcDir, ref)
-		}
-
-		relPath, err := filepath.Rel(hhcDir, fullPath)
-		if err != nil {
-			relPath = ref
-		}
-
-		_, statErr := os.Stat(fullPath)
-		if statErr != nil {
-			addIfNew(&missing, &missingSet, ref)
-		} else if !presentSet[strings.ToLower(relPath)] {
-			addIfNew(&unlisted, &unlistedSet, relPath)
-		}
-	}
-
-	return len(localRefs), nil
-}
-
-func parseLocalParams(hhcPath string) ([]string, error) {
+func parse_HHC_object_param_Local(hhcPath string) ([]string, error) {
 	f, err := os.Open(hhcPath)
 	if err != nil {
 		return nil, fmt.Errorf("cannot open %s: %w", hhcPath, err)
@@ -194,16 +163,16 @@ func parseLocalParams(hhcPath string) ([]string, error) {
 	content := string(data)
 
 	for {
-		objStart := strings.Index(content, "<object")
+		objStart := strings.Index(content, "<OBJECT")
 		if objStart == -1 {
 			break
 		}
 
-		objEnd := strings.Index(content[objStart:], "</object>")
+		objEnd := strings.Index(content[objStart:], "</OBJECT>")
 		if objEnd == -1 {
 			break
 		}
-		objEnd += objStart + len("</object>")
+		objEnd += objStart + len("</OBJECT>")
 		objBlock := content[objStart:objEnd]
 		content = content[objEnd:]
 
@@ -231,6 +200,9 @@ func parseLocalParams(hhcPath string) ([]string, error) {
 
 		ref := nameLower[valueStart : valueStart+valueEnd]
 		ref = strings.TrimSpace(ref)
+		if idx := strings.Index(ref, "#"); idx != -1 {
+			ref = ref[:idx]
+		}
 		if ref != "" {
 			refs = append(refs, ref)
 		}
@@ -239,57 +211,43 @@ func parseLocalParams(hhcPath string) ([]string, error) {
 	return refs, nil
 }
 
-func main() {
-	if len(os.Args) < 2 {
-		fmt.Fprintf(os.Stderr, "Usage: %s <project-folder>\n", os.Args[0])
-		os.Exit(1)
-	}
-
-	projectDir := os.Args[1]
-
-	if _, err := os.Stat(projectDir); os.IsNotExist(err) {
-		fmt.Fprintf(os.Stderr, "Error: directory %s does not exist\n", projectDir)
-		os.Exit(1)
-	}
-
-	hhpPath, err := findHhpFile(projectDir)
+func Step02_ProcessFile_HHC(projectDir string, hhcPath string) error {
+	fmt.Printf("Step 2 - importing HHC file and checking the listed files...\n")
+	localRefs, err := parse_HHC_object_param_Local(hhcPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("cannot parse %s: %w", hhcPath, err)
 	}
 
-	fmt.Printf("Found project file: %s\n", hhpPath)
+	items_missing := len(missing)
+	items_unlisted := len(unlisted)
 
-	err = Step01_ProcessFile_HHP(projectDir, hhpPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
+	hhcDir := filepath.Dir(hhcPath)
 
-	hhcRelPath, err := parse_HHP_section_OPTIONS(hhpPath, "contents file")
-	if err != nil {
-		fmt.Printf("\nNo HHC file specified in HHP: %v\n", err)
-	} else {
-		hhcPath := hhcRelPath
-		if !filepath.IsAbs(hhcRelPath) {
-			hhcPath = filepath.Join(filepath.Dir(hhpPath), hhcRelPath)
+	for _, ref := range localRefs {
+		fullPath := ref
+		if !filepath.IsAbs(ref) {
+			fullPath = filepath.Join(hhcDir, ref)
 		}
-		fmt.Printf("\nFound template file: %s\n", hhcPath)
 
-		processed, err := Step02_ProcessFile_HHC(projectDir, hhcPath)
+		relPath, err := filepath.Rel(hhcDir, fullPath)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			relPath = ref
 		}
 
-		fmt.Printf("HHC: %d items processed\n", processed)
+		_, statErr := os.Stat(fullPath)
+		if statErr != nil {
+			addIfNew(&missing, &missingSet, ref)
+		} else if !presentSet[strings.ToLower(relPath)] {
+			addIfNew(&unlisted, &unlistedSet, relPath)
+		}
 	}
 
-	OutputFinalReport()
+	items_processed := len(localRefs)
 
-	if len(missing) > 0 {
-		os.Exit(2)
-	}
+	fmt.Printf("    %d files listed (+%d missing, +%d unlisted)\n", items_processed,
+		len(missing)-items_missing, len(unlisted)-items_unlisted)
+
+	return nil
 }
 
 func OutputFinalReport() {
@@ -311,5 +269,59 @@ func OutputFinalReport() {
 		for _, f := range unlisted {
 			fmt.Printf("%s\n", f)
 		}
+	}
+}
+
+func main() {
+	if len(os.Args) < 2 {
+		fmt.Fprintf(os.Stderr, "Usage: %s <project-folder>\n", os.Args[0])
+		os.Exit(1)
+	}
+
+	projectDir := os.Args[1]
+
+	if _, err := os.Stat(projectDir); os.IsNotExist(err) {
+		fmt.Fprintf(os.Stderr, "Error: directory %s does not exist\n", projectDir)
+		os.Exit(1)
+	}
+
+	// step 01 - find and process the HHP file
+	hhpPath, err := findHhpFile(projectDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Found project file: %s\n", hhpPath)
+
+	err = Step01_ProcessFile_HHP(projectDir, hhpPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	// step 02 - find and process the HHC file
+	hhcRelPath, err := parse_HHP_section_OPTIONS(hhpPath, "contents file")
+	if err != nil {
+		fmt.Printf("\nNo HHC file specified in HHP: %v\n", err)
+	} else {
+		hhcPath := hhcRelPath
+		if !filepath.IsAbs(hhcRelPath) {
+			hhcPath = filepath.Join(filepath.Dir(hhpPath), hhcRelPath)
+		}
+		fmt.Printf("\nFound template file: %s\n", hhcPath)
+
+		err := Step02_ProcessFile_HHC(projectDir, hhcPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+	}
+
+	// output final report
+	OutputFinalReport()
+
+	if len(missing) > 0 {
+		os.Exit(2)
 	}
 }
