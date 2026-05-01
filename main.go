@@ -294,13 +294,22 @@ func main() {
 
 func OutputFinalReport() {
 	fmt.Printf("\n--- Final Report ---\n")
-	fmt.Printf("Present files: %d\n", len(present))
-	fmt.Printf("Missing files: %d\n", len(missing))
-	for _, f := range missing {
-		fmt.Printf("  [MISSING]  %s\n", f)
+	// report present files
+	fmt.Printf("==== Present files: %d\n", len(present))
+	// report missing items
+	items := len(missing)
+	fmt.Printf("==== Missing files: %d\n", items)
+	if items > 0 {
+		for _, f := range missing {
+			fmt.Printf("%s\n", f)
+		}
 	}
-	fmt.Printf("Unlisted files: %d\n", len(unlisted))
-	for _, f := range unlisted {
-		fmt.Printf("  [UNLISTED] %s\n", f)
+	// report unlisted items
+	items = len(unlisted)
+	fmt.Printf("==== Unlisted files: %d\n", items)
+	if items > 0 {
+		for _, f := range unlisted {
+			fmt.Printf("%s\n", f)
+		}
 	}
 }
