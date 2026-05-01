@@ -230,6 +230,75 @@ func parse_HHC_object_param_Local(hhcPath string) ([]string, error) {
 	return refs, nil
 }
 
+// parse_HHK_object_param_Local extracts every value="..." from <param name="Local" value="...">
+// inside <OBJECT> blocks of the HHK file. Unlike the HHC parser, a single OBJECT may contain
+// multiple <param name="local"> entries, all of which are collected. Trailing #fragment anchors are stripped.
+func parse_HHK_object_param_Local(hhkPath string) ([]string, error) {
+	data, err := os.ReadFile(hhkPath)
+	if err != nil {
+		return nil, fmt.Errorf("error reading %s: %w", hhkPath, err)
+	}
+
+	var refs []string
+	content := string(data)
+
+	for {
+		objStart := strings.Index(content, "<OBJECT")
+		if objStart == -1 {
+			break
+		}
+
+		objEnd := strings.Index(content[objStart:], "</OBJECT>")
+		if objEnd == -1 {
+			break
+		}
+		objEnd += objStart + len("</OBJECT>")
+		objBlock := content[objStart:objEnd]
+		content = content[objEnd:]
+
+		// Collect ALL name="local" params within this object block
+		remain := objBlock
+		for {
+			paramStart := strings.Index(strings.ToLower(remain), `<param`)
+			if paramStart == -1 {
+				break
+			}
+
+			afterParam := strings.ToLower(remain[paramStart:])
+			localIdx := strings.Index(afterParam, `name="local"`)
+			if localIdx == -1 {
+				remain = remain[paramStart+1:]
+				continue
+			}
+
+			valueIdx := strings.Index(afterParam[localIdx:], `value="`)
+			if valueIdx == -1 {
+				remain = remain[paramStart+1:]
+				continue
+			}
+			valueStartAbs := paramStart + localIdx + valueIdx + len(`value="`)
+			quoteEnd := strings.Index(remain[valueStartAbs:], `"`)
+			if quoteEnd == -1 {
+				remain = remain[paramStart+1:]
+				continue
+			}
+
+			ref := remain[valueStartAbs : valueStartAbs+quoteEnd]
+			ref = strings.TrimSpace(ref)
+			if idx := strings.Index(ref, "#"); idx != -1 {
+				ref = ref[:idx]
+			}
+			if ref != "" {
+				refs = append(refs, ref)
+			}
+
+			remain = remain[paramStart+1:]
+		}
+	}
+
+	return refs, nil
+}
+
 // Step02_ProcessFile_HHC checks every file referenced in the HHC table-of-contents.
 // A reference that exists on disk but isn't in the HHP [FILES] list is marked unlisted.
 // A reference that doesn't exist on disk is marked missing.
@@ -264,6 +333,48 @@ func Step02_ProcessFile_HHC(projectDir string, hhcPath string) error {
 			addIfNew(&missing, &missingSet, ref)
 		} else if !presentSet[strings.ToLower(relPath)] {
 			// File exists but wasn't listed in the HHP [FILES] section
+			addIfNew(&unlisted, &unlistedSet, relPath)
+		}
+	}
+
+	items_processed := len(localRefs)
+
+	fmt.Printf("    %d files listed (+%d missing, +%d unlisted)\n", items_processed,
+		len(missing)-items_missing, len(unlisted)-items_unlisted)
+
+	return nil
+}
+
+// Step03_ProcessFile_HHK checks every file referenced in the HHK index file.
+// A reference that exists on disk but isn't in the HHP [FILES] list is marked unlisted.
+// A reference that doesn't exist on disk is marked missing.
+func Step03_ProcessFile_HHK(projectDir string, hhkPath string) error {
+	fmt.Printf("Step 3 - importing HHK file and checking the listed files...\n")
+	localRefs, err := parse_HHK_object_param_Local(hhkPath)
+	if err != nil {
+		return fmt.Errorf("cannot parse %s: %w", hhkPath, err)
+	}
+
+	items_missing := len(missing)
+	items_unlisted := len(unlisted)
+
+	hhkDir := filepath.Dir(hhkPath)
+
+	for _, ref := range localRefs {
+		fullPath := ref
+		if !filepath.IsAbs(ref) {
+			fullPath = filepath.Join(hhkDir, ref)
+		}
+
+		relPath, err := filepath.Rel(hhkDir, fullPath)
+		if err != nil {
+			relPath = ref
+		}
+
+		_, statErr := os.Stat(fullPath)
+		if statErr != nil {
+			addIfNew(&missing, &missingSet, ref)
+		} else if !presentSet[strings.ToLower(relPath)] {
 			addIfNew(&unlisted, &unlistedSet, relPath)
 		}
 	}
@@ -339,6 +450,24 @@ func main() {
 		fmt.Printf("\nFound template file: %s\n", hhcPath)
 
 		err := Step02_ProcessFile_HHC(projectDir, hhcPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+	}
+
+	// Step 03 - resolve the HHK file from the HHP [OPTIONS] section and validate references
+	hhkRelPath, err := parse_HHP_section_OPTIONS(hhpPath, "index file")
+	if err != nil {
+		fmt.Printf("\nNo HHK file specified in HHP: %v\n", err)
+	} else {
+		hhkPath := hhkRelPath
+		if !filepath.IsAbs(hhkRelPath) {
+			hhkPath = filepath.Join(filepath.Dir(hhpPath), hhkRelPath)
+		}
+		fmt.Printf("\nFound index file: %s\n", hhkPath)
+
+		err := Step03_ProcessFile_HHK(projectDir, hhkPath)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
