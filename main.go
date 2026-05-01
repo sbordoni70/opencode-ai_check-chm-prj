@@ -8,6 +8,7 @@ import (
 	"strings"
 )
 
+// Global tracking lists and dedup sets for three categories of files.
 var (
 	present     []string
 	missing     []string
@@ -17,6 +18,7 @@ var (
 	unlistedSet = make(map[string]bool)
 )
 
+// addIfNew appends an item to a list only if it hasn't been seen before (case-insensitive).
 func addIfNew(list *[]string, set *map[string]bool, item string) {
 	key := strings.ToLower(item)
 	if (*set)[key] {
@@ -26,6 +28,7 @@ func addIfNew(list *[]string, set *map[string]bool, item string) {
 	*list = append(*list, item)
 }
 
+// findHhpFile walks the given directory tree and returns the first .hhp file found.
 func findHhpFile(dir string) (string, error) {
 	var hhpFile string
 	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
@@ -47,6 +50,8 @@ func findHhpFile(dir string) (string, error) {
 	return hhpFile, nil
 }
 
+// parse_HHP_section_OPTIONS finds a key=value entry inside the [OPTIONS] block of an HHP file.
+// The `entry` argument is matched case-insensitively (e.g. "contents file").
 func parse_HHP_section_OPTIONS(hhpPath string, entry string) (string, error) {
 	f, err := os.Open(hhpPath)
 	if err != nil {
@@ -60,18 +65,20 @@ func parse_HHP_section_OPTIONS(hhpPath string, entry string) (string, error) {
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 
+		// Enter [OPTIONS] section
 		if strings.ToUpper(line) == "[OPTIONS]" {
 			inOptions = true
 			continue
 		}
 
 		if inOptions {
+			// Blank line or next section header means we've left [OPTIONS]
 			if line == "" || (strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]")) {
 				break
 			}
 			lower := strings.ToLower(line)
-			entry := entry + "="
-			if strings.HasPrefix(lower, entry) {
+			prefix := entry + "="
+			if strings.HasPrefix(lower, prefix) {
 				idx := strings.Index(line, "=")
 				val := strings.TrimSpace(line[idx+1:])
 				return val, nil
@@ -86,6 +93,7 @@ func parse_HHP_section_OPTIONS(hhpPath string, entry string) (string, error) {
 	return "", fmt.Errorf("no Contents file entry found in [OPTIONS] section of %s", hhpPath)
 }
 
+// parse_HHP_section_FILES reads the [FILES] block and returns every non-comment line.
 func parse_HHP_section_FILES(hhpPath string) ([]string, error) {
 	f, err := os.Open(hhpPath)
 	if err != nil {
@@ -106,9 +114,11 @@ func parse_HHP_section_FILES(hhpPath string) ([]string, error) {
 		}
 
 		if inFilesSection {
+			// Blank line or next section header means we've left [FILES]
 			if line == "" || (strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]")) {
 				break
 			}
+			// Skip comment lines starting with ; or #
 			if !strings.HasPrefix(line, ";") && !strings.HasPrefix(line, "#") {
 				files = append(files, line)
 			}
@@ -122,6 +132,8 @@ func parse_HHP_section_FILES(hhpPath string) ([]string, error) {
 	return files, nil
 }
 
+// Step01_ProcessFile_HHP checks every file listed in the HHP [FILES] section
+// and classifies each as present (found on disk) or missing.
 func Step01_ProcessFile_HHP(projectDir string, hhpPath string) error {
 	fmt.Printf("Step 1 - importing HHP file and checking the listed files...\n")
 	files, err := parse_HHP_section_FILES(hhpPath)
@@ -147,6 +159,8 @@ func Step01_ProcessFile_HHP(projectDir string, hhpPath string) error {
 	return nil
 }
 
+// parse_HHC_object_param_Local extracts every value="..." from <param name="Local" value="...">
+// inside <OBJECT> blocks of the HHC file, and strips any trailing #fragment anchor.
 func parse_HHC_object_param_Local(hhcPath string) ([]string, error) {
 	f, err := os.Open(hhcPath)
 	if err != nil {
@@ -162,6 +176,7 @@ func parse_HHC_object_param_Local(hhcPath string) ([]string, error) {
 	var refs []string
 	content := string(data)
 
+	// Iterate over every <OBJECT ... </OBJECT> block
 	for {
 		objStart := strings.Index(content, "<OBJECT")
 		if objStart == -1 {
@@ -176,17 +191,20 @@ func parse_HHC_object_param_Local(hhcPath string) ([]string, error) {
 		objBlock := content[objStart:objEnd]
 		content = content[objEnd:]
 
+		// Look for a <param tag inside this object block
 		paramStart := strings.Index(objBlock, `<param`)
 		if paramStart == -1 {
 			continue
 		}
 
+		// Work on a lowercased copy for case-insensitive matching
 		nameLower := strings.ToLower(objBlock[paramStart:])
 		localIdx := strings.Index(nameLower, `name="local"`)
 		if localIdx == -1 {
 			continue
 		}
 
+		// Find the corresponding value="..." after name="local"
 		valueIdx := strings.Index(nameLower[localIdx:], `value="`)
 		if valueIdx == -1 {
 			continue
@@ -200,6 +218,7 @@ func parse_HHC_object_param_Local(hhcPath string) ([]string, error) {
 
 		ref := nameLower[valueStart : valueStart+valueEnd]
 		ref = strings.TrimSpace(ref)
+		// Strip trailing fragment anchor (e.g. "page.html#section" -> "page.html")
 		if idx := strings.Index(ref, "#"); idx != -1 {
 			ref = ref[:idx]
 		}
@@ -211,6 +230,9 @@ func parse_HHC_object_param_Local(hhcPath string) ([]string, error) {
 	return refs, nil
 }
 
+// Step02_ProcessFile_HHC checks every file referenced in the HHC table-of-contents.
+// A reference that exists on disk but isn't in the HHP [FILES] list is marked unlisted.
+// A reference that doesn't exist on disk is marked missing.
 func Step02_ProcessFile_HHC(projectDir string, hhcPath string) error {
 	fmt.Printf("Step 2 - importing HHC file and checking the listed files...\n")
 	localRefs, err := parse_HHC_object_param_Local(hhcPath)
@@ -218,6 +240,7 @@ func Step02_ProcessFile_HHC(projectDir string, hhcPath string) error {
 		return fmt.Errorf("cannot parse %s: %w", hhcPath, err)
 	}
 
+	// Snapshot current counts so we can report incremental deltas
 	items_missing := len(missing)
 	items_unlisted := len(unlisted)
 
@@ -229,6 +252,7 @@ func Step02_ProcessFile_HHC(projectDir string, hhcPath string) error {
 			fullPath = filepath.Join(hhcDir, ref)
 		}
 
+		// Compute path relative to the HHC directory for cross-comparison with HHP list
 		relPath, err := filepath.Rel(hhcDir, fullPath)
 		if err != nil {
 			relPath = ref
@@ -236,8 +260,10 @@ func Step02_ProcessFile_HHC(projectDir string, hhcPath string) error {
 
 		_, statErr := os.Stat(fullPath)
 		if statErr != nil {
+			// File doesn't exist on disk
 			addIfNew(&missing, &missingSet, ref)
 		} else if !presentSet[strings.ToLower(relPath)] {
+			// File exists but wasn't listed in the HHP [FILES] section
 			addIfNew(&unlisted, &unlistedSet, relPath)
 		}
 	}
@@ -250,6 +276,7 @@ func Step02_ProcessFile_HHC(projectDir string, hhcPath string) error {
 	return nil
 }
 
+// OutputFinalReport prints a summary of all three file categories.
 func OutputFinalReport() {
 	fmt.Printf("\n--- Final Report ---\n")
 	// report present files
@@ -285,7 +312,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// step 01 - find and process the HHP file
+	// Step 01 - locate the HHP project file and validate its [FILES] list
 	hhpPath, err := findHhpFile(projectDir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -300,7 +327,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// step 02 - find and process the HHC file
+	// Step 02 - resolve the HHC file from the HHP [OPTIONS] section and validate references
 	hhcRelPath, err := parse_HHP_section_OPTIONS(hhpPath, "contents file")
 	if err != nil {
 		fmt.Printf("\nNo HHC file specified in HHP: %v\n", err)
@@ -318,9 +345,10 @@ func main() {
 		}
 	}
 
-	// output final report
+	// Print the final summary report
 	OutputFinalReport()
 
+	// Exit with code 2 if any files are missing
 	if len(missing) > 0 {
 		os.Exit(2)
 	}
