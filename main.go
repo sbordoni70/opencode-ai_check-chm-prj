@@ -66,12 +66,12 @@ func parse_HHP_Files_Section(hhpPath string) ([]string, error) {
 }
 
 var (
-	present      []string
-	missing      []string
-	unlisted     []string
-	presentSet   = make(map[string]bool)
-	missingSet   = make(map[string]bool)
-	unlistedSet  = make(map[string]bool)
+	present     []string
+	missing     []string
+	unlisted    []string
+	presentSet  = make(map[string]bool)
+	missingSet  = make(map[string]bool)
+	unlistedSet = make(map[string]bool)
 )
 
 func addIfNew(list *[]string, set *map[string]bool, item string) {
@@ -102,25 +102,6 @@ func Step01_ProcessFile_HHP(projectDir string, hhpPath string) error {
 		}
 	}
 
-	hhpDir := filepath.Dir(hhpPath)
-	err = filepath.Walk(projectDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if info.IsDir() {
-			return nil
-		}
-
-		relPath, err := filepath.Rel(hhpDir, path)
-		if err != nil {
-			return nil
-		}
-
-		if !presentSet[strings.ToLower(relPath)] {
-			addIfNew(&unlisted, &unlistedSet, relPath)
-		}
-		return nil
-	})
 	if err != nil {
 		return fmt.Errorf("error scanning project dir: %w", err)
 	}
@@ -128,22 +109,22 @@ func Step01_ProcessFile_HHP(projectDir string, hhpPath string) error {
 	return nil
 }
 
-func Step02_ProcessFile_HHT(projectDir string, hhtPath string) (int, error) {
-	fmt.Printf("Step 2 - importing HHT file and checking the listed files...\n")
-	localRefs, err := parseLocalParams(hhtPath)
+func Step02_ProcessFile_HHC(projectDir string, hhcPath string) (int, error) {
+	fmt.Printf("Step 2 - importing HHC file and checking the listed files...\n")
+	localRefs, err := parseLocalParams(hhcPath)
 	if err != nil {
-		return 0, fmt.Errorf("cannot parse %s: %w", hhtPath, err)
+		return 0, fmt.Errorf("cannot parse %s: %w", hhcPath, err)
 	}
 
-	hhtDir := filepath.Dir(hhtPath)
+	hhcDir := filepath.Dir(hhcPath)
 
 	for _, ref := range localRefs {
 		fullPath := ref
 		if !filepath.IsAbs(ref) {
-			fullPath = filepath.Join(hhtDir, ref)
+			fullPath = filepath.Join(hhcDir, ref)
 		}
 
-		relPath, err := filepath.Rel(hhtDir, fullPath)
+		relPath, err := filepath.Rel(hhcDir, fullPath)
 		if err != nil {
 			relPath = ref
 		}
@@ -159,16 +140,16 @@ func Step02_ProcessFile_HHT(projectDir string, hhtPath string) (int, error) {
 	return len(localRefs), nil
 }
 
-func parseLocalParams(hhtPath string) ([]string, error) {
-	f, err := os.Open(hhtPath)
+func parseLocalParams(hhcPath string) ([]string, error) {
+	f, err := os.Open(hhcPath)
 	if err != nil {
-		return nil, fmt.Errorf("cannot open %s: %w", hhtPath, err)
+		return nil, fmt.Errorf("cannot open %s: %w", hhcPath, err)
 	}
 	defer f.Close()
 
-	data, err := os.ReadFile(hhtPath)
+	data, err := os.ReadFile(hhcPath)
 	if err != nil {
-		return nil, fmt.Errorf("error reading %s: %w", hhtPath, err)
+		return nil, fmt.Errorf("error reading %s: %w", hhcPath, err)
 	}
 
 	var refs []string
@@ -249,21 +230,18 @@ func main() {
 
 	total := len(present) + len(missing)
 	fmt.Printf("HHP: %d files listed (%d present, %d missing)\n", total, len(present), len(missing))
-	if len(unlisted) > 0 {
-		fmt.Printf("     %d files on disk not listed in HHP\n", len(unlisted))
-	}
 
-	hhtPath, err := findHhtFile(projectDir)
+	hhcPath, err := findHhcFile(projectDir)
 	if err == nil {
-		fmt.Printf("\nFound template file: %s\n", hhtPath)
+		fmt.Printf("\nFound template file: %s\n", hhcPath)
 
-		processed, err := Step02_ProcessFile_HHT(projectDir, hhtPath)
+		processed, err := Step02_ProcessFile_HHC(projectDir, hhcPath)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
 
-		fmt.Printf("HHT: %d items processed\n", processed)
+		fmt.Printf("HHC: %d items processed\n", processed)
 	}
 
 	OutputFinalReport()
@@ -286,14 +264,14 @@ func OutputFinalReport() {
 	}
 }
 
-func findHhtFile(dir string) (string, error) {
-	var hhtFile string
+func findHhcFile(dir string) (string, error) {
+	var hhcFile string
 	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-		if !info.IsDir() && strings.EqualFold(filepath.Ext(path), ".hht") {
-			hhtFile = path
+		if !info.IsDir() && strings.EqualFold(filepath.Ext(path), ".hhc") {
+			hhcFile = path
 			return filepath.SkipDir
 		}
 		return nil
@@ -301,8 +279,8 @@ func findHhtFile(dir string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if hhtFile == "" {
-		return "", fmt.Errorf("no .hht file found in %s", dir)
+	if hhcFile == "" {
+		return "", fmt.Errorf("no .hhc file found in %s", dir)
 	}
-	return hhtFile, nil
+	return hhcFile, nil
 }
