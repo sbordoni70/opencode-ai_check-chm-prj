@@ -230,6 +230,52 @@ func parse_HHC_object_param_Local(hhcPath string) ([]string, error) {
 	return refs, nil
 }
 
+// Step02_ProcessFile_HHC checks every file referenced in the HHC table-of-contents.
+// A reference that exists on disk but isn't in the HHP [FILES] list is marked unlisted.
+// A reference that doesn't exist on disk is marked missing.
+func Step02_ProcessFile_HHC(projectDir string, hhcPath string) error {
+	fmt.Printf("Step 2 - importing HHC file and checking the listed files...\n")
+	localRefs, err := parse_HHC_object_param_Local(hhcPath)
+	if err != nil {
+		return fmt.Errorf("cannot parse %s: %w", hhcPath, err)
+	}
+
+	// Snapshot current counts so we can report incremental deltas
+	items_missing := len(missing)
+	items_unlisted := len(unlisted)
+
+	hhcDir := filepath.Dir(hhcPath)
+
+	for _, ref := range localRefs {
+		fullPath := ref
+		if !filepath.IsAbs(ref) {
+			fullPath = filepath.Join(hhcDir, ref)
+		}
+
+		// Compute path relative to the HHC directory for cross-comparison with HHP list
+		relPath, err := filepath.Rel(hhcDir, fullPath)
+		if err != nil {
+			relPath = ref
+		}
+
+		_, statErr := os.Stat(fullPath)
+		if statErr != nil {
+			// File doesn't exist on disk
+			addIfNew(&missing, &missingSet, ref)
+		} else if !presentSet[strings.ToLower(relPath)] {
+			// File exists but wasn't listed in the HHP [FILES] section
+			addIfNew(&unlisted, &unlistedSet, relPath)
+		}
+	}
+
+	items_processed := len(localRefs)
+
+	fmt.Printf("    %d files listed (+%d missing, +%d unlisted)\n", items_processed,
+		len(missing)-items_missing, len(unlisted)-items_unlisted)
+
+	return nil
+}
+
 // parse_HHK_object_param_Local extracts every value="..." from <param name="Local" value="...">
 // inside <OBJECT> blocks of the HHK file. Unlike the HHC parser, a single OBJECT may contain
 // multiple <param name="local"> entries, all of which are collected. Trailing #fragment anchors are stripped.
@@ -299,52 +345,6 @@ func parse_HHK_object_param_Local(hhkPath string) ([]string, error) {
 	return refs, nil
 }
 
-// Step02_ProcessFile_HHC checks every file referenced in the HHC table-of-contents.
-// A reference that exists on disk but isn't in the HHP [FILES] list is marked unlisted.
-// A reference that doesn't exist on disk is marked missing.
-func Step02_ProcessFile_HHC(projectDir string, hhcPath string) error {
-	fmt.Printf("Step 2 - importing HHC file and checking the listed files...\n")
-	localRefs, err := parse_HHC_object_param_Local(hhcPath)
-	if err != nil {
-		return fmt.Errorf("cannot parse %s: %w", hhcPath, err)
-	}
-
-	// Snapshot current counts so we can report incremental deltas
-	items_missing := len(missing)
-	items_unlisted := len(unlisted)
-
-	hhcDir := filepath.Dir(hhcPath)
-
-	for _, ref := range localRefs {
-		fullPath := ref
-		if !filepath.IsAbs(ref) {
-			fullPath = filepath.Join(hhcDir, ref)
-		}
-
-		// Compute path relative to the HHC directory for cross-comparison with HHP list
-		relPath, err := filepath.Rel(hhcDir, fullPath)
-		if err != nil {
-			relPath = ref
-		}
-
-		_, statErr := os.Stat(fullPath)
-		if statErr != nil {
-			// File doesn't exist on disk
-			addIfNew(&missing, &missingSet, ref)
-		} else if !presentSet[strings.ToLower(relPath)] {
-			// File exists but wasn't listed in the HHP [FILES] section
-			addIfNew(&unlisted, &unlistedSet, relPath)
-		}
-	}
-
-	items_processed := len(localRefs)
-
-	fmt.Printf("    %d files listed (+%d missing, +%d unlisted)\n", items_processed,
-		len(missing)-items_missing, len(unlisted)-items_unlisted)
-
-	return nil
-}
-
 // Step03_ProcessFile_HHK checks every file referenced in the HHK index file.
 // A reference that exists on disk but isn't in the HHP [FILES] list is marked unlisted.
 // A reference that doesn't exist on disk is marked missing.
@@ -389,7 +389,7 @@ func Step03_ProcessFile_HHK(projectDir string, hhkPath string) error {
 
 // OutputFinalReport prints a summary of all three file categories.
 func OutputFinalReport() {
-	fmt.Printf("\n--- Final Report ---\n")
+	fmt.Printf("\n--- Final Report ---\n\n")
 	// report present files
 	fmt.Printf("==== Present files: %d\n", len(present))
 	// report missing items
@@ -399,6 +399,7 @@ func OutputFinalReport() {
 		for _, f := range missing {
 			fmt.Printf("%s\n", f)
 		}
+		fmt.Printf("\n")
 	}
 	// report unlisted items
 	items = len(unlisted)
@@ -407,6 +408,7 @@ func OutputFinalReport() {
 		for _, f := range unlisted {
 			fmt.Printf("%s\n", f)
 		}
+		fmt.Printf("\n")
 	}
 }
 
