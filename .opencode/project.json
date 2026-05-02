@@ -1,11 +1,12 @@
 {
   "project": "check-chm-prj",
+  "version": "1.0.0",
   "language": "Go",
   "description": "CLI tool that validates Microsoft HTML Help Workshop (.hhp/.hhc/.hhk) project files by checking for missing source files and files referenced outside the project manifest.",
   "last_session": "2026-05-02T00:00:00Z",
-  "status": "build passes, HHK support added, final report sorted",
+  "status": "build passes, hyperlink validation (Steps 4-5) added, program banner with version",
   "conventions": {
-    "naming": "Functions use snake_case with underscores for multi-word names (e.g. parse_HHP_section_FILES, Step01_ProcessFile_HHP)",
+    "naming": "Functions use snake_case with underscores for multi-word names (e.g. parse_HHP_section_FILES, Step01_ProcessFile_HHP, isLocalHref, extractHrefsFromFile)",
     "file_structure": "Single main.go file, no packages beyond stdlib",
     "build": "go build -o check-chm-prj.exe .",
     "exit_codes": {
@@ -29,7 +30,10 @@
     "Added HHK (index file) support: Step03_ProcessFile_HHK and parse_HHK_object_param_Local",
     "HHK file resolved from HHP [OPTIONS] 'index file' entry",
     "parse_HHK_object_param_Local collects ALL name='local' params per OBJECT (not just first)",
-    "Added sort import, OutputFinalReport now sorts missing and unlisted lists before printing"
+    "Added sort import, OutputFinalReport now sorts missing and unlisted lists before printing",
+    "Added Step 4: hyperlink validation for present HTML files (isLocalHref, extractHrefsFromFile helpers)",
+    "Added Step 5: hyperlink validation for unlisted HTML files (mirrors Step 4 logic)",
+    "Added program banner with customizable ProgramName and Version constants"
   ],
   "files": {
     "source": ["main.go"],
@@ -40,6 +44,6 @@
   "global_state": {
     "present": "files listed in HHP [FILES] and found on disk",
     "missing": "files referenced (HHP/HHC/HHK) but not found on disk",
-    "unlisted": "files found on disk and referenced in HHC/HHK but missing from HHP [FILES] section"
+    "unlisted": "files found on disk and referenced in HHC/HHK/HTML hyperlinks but missing from HHP [FILES] section"
   }
 }
