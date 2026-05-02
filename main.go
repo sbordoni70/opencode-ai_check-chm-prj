@@ -11,7 +11,7 @@ import (
 
 const (
 	ProgramName = "check-chm-prj"
-	Version     = "2026.05.0"
+	Version     = "2026.05.1.0"
 )
 
 // Global tracking lists and dedup sets for three categories of files.
@@ -198,36 +198,28 @@ func parse_HHC_object_param_Local(hhcPath string) ([]string, error) {
 		content = content[objEnd:]
 
 		// Look for a <param tag inside this object block
-		paramStart := strings.Index(objBlock, `<param`)
-		if paramStart == -1 {
+		offset := strings.Index(objBlock, `<param name="Local" value="`)
+		if offset == -1 {
 			continue
 		}
 
-		// Work on a lowercased copy for case-insensitive matching
-		nameLower := strings.ToLower(objBlock[paramStart:])
-		localIdx := strings.Index(nameLower, `name="local"`)
-		if localIdx == -1 {
+		// update offset to the start of this param tag for the next search
+		offset += len(`<param name="Local" value="`)
+		// get value end quote position
+		index := strings.Index(objBlock[offset:], `">`)
+		if index == -1 {
 			continue
 		}
 
-		// Find the corresponding value="..." after name="local"
-		valueIdx := strings.Index(nameLower[localIdx:], `value="`)
-		if valueIdx == -1 {
-			continue
-		}
-		valueStart := localIdx + valueIdx + len(`value="`)
-
-		valueEnd := strings.Index(nameLower[valueStart:], `"`)
-		if valueEnd == -1 {
-			continue
-		}
-
-		ref := nameLower[valueStart : valueStart+valueEnd]
+		// extract the value and strip trailing fragment if any
+		ref := objBlock[offset : offset+index]
 		ref = strings.TrimSpace(ref)
 		// Strip trailing fragment anchor (e.g. "page.html#section" -> "page.html")
-		if idx := strings.Index(ref, "#"); idx != -1 {
+		idx := strings.Index(ref, "#")
+		if idx != -1 {
 			ref = ref[:idx]
 		}
+		// if not null, append to the array of references to check
 		if ref != "" {
 			refs = append(refs, ref)
 		}
@@ -295,7 +287,7 @@ func parse_HHK_object_param_Local(hhkPath string) ([]string, error) {
 	content := string(data)
 
 	for {
-		objStart := strings.Index(content, "<OBJECT")
+		objStart := strings.Index(content, "<OBJECT ")
 		if objStart == -1 {
 			break
 		}
@@ -308,43 +300,36 @@ func parse_HHK_object_param_Local(hhkPath string) ([]string, error) {
 		objBlock := content[objStart:objEnd]
 		content = content[objEnd:]
 
+		offset := len("<OBJECT ")
 		// Collect ALL name="local" params within this object block
-		remain := objBlock
 		for {
-			paramStart := strings.Index(strings.ToLower(remain), `<param`)
-			if paramStart == -1 {
+			// seek the correct param tag
+			index := strings.Index(objBlock[offset:], `<param name="local" value="`)
+			if index == -1 {
 				break
 			}
 
-			afterParam := strings.ToLower(remain[paramStart:])
-			localIdx := strings.Index(afterParam, `name="local"`)
-			if localIdx == -1 {
-				remain = remain[paramStart+1:]
+			// update offset to the start of this param tag for the next iteration
+			offset += index + len(`<param name="Local" value="`)
+			// update offset to the start of the actual value after value=""
+			index = strings.Index(objBlock[offset:], `">`)
+			if index == -1 {
 				continue
 			}
 
-			valueIdx := strings.Index(afterParam[localIdx:], `value="`)
-			if valueIdx == -1 {
-				remain = remain[paramStart+1:]
-				continue
-			}
-			valueStartAbs := paramStart + localIdx + valueIdx + len(`value="`)
-			quoteEnd := strings.Index(remain[valueStartAbs:], `"`)
-			if quoteEnd == -1 {
-				remain = remain[paramStart+1:]
-				continue
-			}
-
-			ref := remain[valueStartAbs : valueStartAbs+quoteEnd]
+			// extract the value and strip trailing fragment if any
+			ref := objBlock[offset : offset+index]
 			ref = strings.TrimSpace(ref)
-			if idx := strings.Index(ref, "#"); idx != -1 {
+			idx := strings.Index(ref, "#")
+			if idx != -1 {
 				ref = ref[:idx]
 			}
 			if ref != "" {
 				refs = append(refs, ref)
 			}
 
-			remain = remain[paramStart+1:]
+			// update offset to continue searching for the next name="local" param within this object block
+			offset += index + len(`">`)
 		}
 	}
 
@@ -367,21 +352,22 @@ func Step03_ProcessFile_HHK(projectDir string, hhkPath string) error {
 	hhkDir := filepath.Dir(hhkPath)
 
 	for _, ref := range localRefs {
+		// if it's in the present set,... no need to check anything
+		if presentSet[strings.ToLower(ref)] {
+			continue
+		}
+
+		// else we need to understand where to put it
 		fullPath := ref
 		if !filepath.IsAbs(ref) {
 			fullPath = filepath.Join(hhkDir, ref)
 		}
 
-		relPath, err := filepath.Rel(hhkDir, fullPath)
-		if err != nil {
-			relPath = ref
-		}
-
 		_, statErr := os.Stat(fullPath)
 		if statErr != nil {
 			addIfNew(&missing, &missingSet, ref)
-		} else if !presentSet[strings.ToLower(relPath)] {
-			addIfNew(&unlisted, &unlistedSet, relPath)
+		} else {
+			addIfNew(&unlisted, &unlistedSet, ref)
 		}
 	}
 
@@ -611,13 +597,13 @@ func Step05_UnlistedList_CheckHyperlinks(projectDir string) error {
 
 // OutputFinalReport prints a summary of all three file categories.
 func OutputFinalReport() {
-
-	fmt.Printf("\n--- Final Report ---\n\n")
+	// print header
+	fmt.Printf("\n==== Final Report ==========================================\n\n")
 	// report present files
-	fmt.Printf("==== Present files: %d\n\n", len(present))
+	fmt.Printf("---- Present files: %d\n\n", len(present))
 	// report missing items
 	items := len(missing)
-	fmt.Printf("==== Missing files (i.e. broken links/references): %d\n", items)
+	fmt.Printf("---- Missing files (i.e. broken links/references): %d\n", items)
 	if items > 0 {
 		sort.Strings(missing)
 		for _, f := range missing {
@@ -627,7 +613,7 @@ func OutputFinalReport() {
 	}
 	// report unlisted items
 	items = len(unlisted)
-	fmt.Printf("==== Unlisted files to be added to HHP file: %d\n", items)
+	fmt.Printf("---- Unlisted files to be added to HHP file: %d\n", items)
 	if items > 0 {
 		sort.Strings(unlisted)
 		for _, f := range unlisted {
@@ -635,15 +621,17 @@ func OutputFinalReport() {
 		}
 		fmt.Printf("\n")
 	}
+	// print footer
+	fmt.Printf("\n============================================================\n\n")
 }
 
 func main() {
 
 	// print program header
-	fmt.Fprintf(os.Stderr, "\n%s v%s\n  a small utility to check & report problems inCHM project HTML files references\n\n", ProgramName, Version)
+	fmt.Fprintf(os.Stderr, "\n%s v%s\n  a small utility to check & report HTML files references problems in CHM project\n\n", ProgramName, Version)
 
 	if len(os.Args) < 2 {
-		fmt.Fprintf(os.Stderr, "  Usage: %s <project-folder>\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  Usage: %s <project-folder>\n", ProgramName)
 		os.Exit(1)
 	}
 

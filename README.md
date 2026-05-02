@@ -44,8 +44,8 @@ The tool will recursively search `<project-folder>` for a `.hhp` file, and optio
 ### Example Output
 
 ```
-  check-chm-prj v1.0.0
-  CHM Project File Validator
+  check-chm-prj v2026.05.1.0
+  a small utility to check & report HTML files references problems in CHM project
 
 Found project file: C:\help\myproject.hhp
 Step 1 - importing HHP file and checking the listed files...
@@ -65,26 +65,31 @@ Step 4 - checking hyperlinks in present HTML files...
 Step 5 - checking hyperlinks in unlisted HTML files...
     19 hyperlinks checked (+1 missing, +0 unlisted)
 
---- Final Report ---
-==== Present files: 38
-==== Missing files (i.e. broken links/references): 11
-    intro_overview.html
-    api_reference.html
-    troubleshooting.html
-    changelog.html
-    quick_start.html
-    faq.html
-    glossary.html
-    broken_link.html
-    old_page.html
-    deprecated_api.html
-    missing_image.html
-==== Unlisted files to be added to HHP file: 5
-    draft_notes.html
-    legacy_v1.html
-    appendix_b.html
-    known_issues.html
-    hidden_page.html
+==== Final Report ==========================================
+
+---- Present files: 38
+
+---- Missing files (i.e. broken links/references): 11
+intro_overview.html
+api_reference.html
+troubleshooting.html
+changelog.html
+quick_start.html
+faq.html
+glossary.html
+broken_link.html
+old_page.html
+deprecated_api.html
+missing_image.html
+
+---- Unlisted files to be added to HHP file: 5
+draft_notes.html
+legacy_v1.html
+appendix_b.html
+known_issues.html
+hidden_page.html
+
+============================================================
 ```
 
 ## File Format Details
@@ -118,5 +123,6 @@ The tool scans each HTML file in the present and unlisted lists for `<a href="..
 - If no `.hhc` file is found, only the HHP phase runs.
 - If no `.hhk` file is found, only the HHP and HHC phases run.
 - Hyperlink validation (Steps 4-5) only processes files with `.html` or `.htm` extensions.
-- Hyperlinks are extracted using a simple regex pattern; complex or malformed HTML may produce false positives.
+- Hyperlinks are extracted via simple string scanning; complex or malformed HTML may produce false positives.
 - The program version is customizable via the `Version` constant in `main.go`.
+- The program name is customizable via the `ProgramName` constant in `main.go`.

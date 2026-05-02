@@ -1,10 +1,10 @@
 {
   "project": "check-chm-prj",
-  "version": "1.0.0",
+  "version": "2026.05.1.0",
   "language": "Go",
   "description": "CLI tool that validates Microsoft HTML Help Workshop (.hhp/.hhc/.hhk) project files by checking for missing source files and files referenced outside the project manifest.",
   "last_session": "2026-05-02T00:00:00Z",
-  "status": "build passes, hyperlink validation (Steps 4-5) added, program banner with version",
+  "status": "build passes, HHC/HHK parsing simplified, valueStartAbs bug fixed, report output updated",
   "conventions": {
     "naming": "Functions use snake_case with underscores for multi-word names (e.g. parse_HHP_section_FILES, Step01_ProcessFile_HHP, isLocalHref, extractHrefsFromFile)",
     "file_structure": "Single main.go file, no packages beyond stdlib",
@@ -33,7 +33,10 @@
     "Added sort import, OutputFinalReport now sorts missing and unlisted lists before printing",
     "Added Step 4: hyperlink validation for present HTML files (isLocalHref, extractHrefsFromFile helpers)",
     "Added Step 5: hyperlink validation for unlisted HTML files (mirrors Step 4 logic)",
-    "Added program banner with customizable ProgramName and Version constants"
+    "Added program banner with customizable ProgramName and Version constants",
+    "Fixed parse_HHK_object_param_Local: valueStartAbs was incorrectly used as absolute index into nameLower instead of relative index into remain",
+    "Simplified HHC & HHK parsing: removed .ToLower() conversion as resulting string was longer than original",
+    "Updated report output with ==== and ---- prefixes and conditional listing"
   ],
   "files": {
     "source": ["main.go"],
