@@ -271,7 +271,7 @@ func Step02_ProcessFile_HHC(projectDir string, hhcPath string) error {
 
 	items_processed := len(localRefs)
 
-	fmt.Printf("    %d files listed (+%d missing, +%d unlisted)\n", items_processed,
+	fmt.Printf("    %d files listed (+%d missing, +%d unlisted)\n\n", items_processed,
 		len(missing)-items_missing, len(unlisted)-items_unlisted)
 
 	return nil
@@ -382,8 +382,152 @@ func Step03_ProcessFile_HHK(projectDir string, hhkPath string) error {
 
 	items_processed := len(localRefs)
 
-	fmt.Printf("    %d files listed (+%d missing, +%d unlisted)\n", items_processed,
+	fmt.Printf("    %d files listed (+%d missing, +%d unlisted)\n\n", items_processed,
 		len(missing)-items_missing, len(unlisted)-items_unlisted)
+
+	return nil
+}
+
+// isLocalHref determines whether an href value is a local file reference.
+// It returns false for empty strings, external protocols, and fragment-only links.
+func isLocalHref(href string) bool {
+	lower := strings.ToLower(href)
+	if lower == "" {
+		return false
+	}
+	if strings.HasPrefix(lower, "http://") || strings.HasPrefix(lower, "https://") ||
+		strings.HasPrefix(lower, "ftp://") || strings.HasPrefix(lower, "mailto:") ||
+		strings.HasPrefix(lower, "javascript:") || strings.HasPrefix(lower, "data:") {
+		return false
+	}
+	if strings.HasPrefix(href, "#") {
+		return false
+	}
+	return true
+}
+
+// extractHrefsFromFile reads an HTML file and extracts all href values from <a> tags.
+// It strips trailing #fragment anchors and returns only non-empty values.
+func extractHrefsFromFile(filePath string) ([]string, error) {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("error reading %s: %w", filePath, err)
+	}
+
+	var hrefs []string
+	content := string(data)
+
+	for {
+		aStart := strings.Index(content, "<a ")
+		if aStart == -1 {
+			aStart = strings.Index(content, "<A ")
+		}
+		if aStart == -1 {
+			break
+		}
+
+		aEnd := strings.Index(content[aStart:], ">")
+		if aEnd == -1 {
+			break
+		}
+		aTag := content[aStart : aStart+aEnd]
+		content = content[aStart+aEnd:]
+
+		tagLower := strings.ToLower(aTag)
+		hrefIdx := strings.Index(tagLower, `href="`)
+		if hrefIdx == -1 {
+			continue
+		}
+
+		valueStart := hrefIdx + len(`href="`)
+		valueEnd := strings.Index(aTag[valueStart:], `"`)
+		if valueEnd == -1 {
+			continue
+		}
+
+		href := aTag[valueStart : valueStart+valueEnd]
+		href = strings.TrimSpace(href)
+
+		if idx := strings.Index(href, "#"); idx != -1 {
+			href = href[:idx]
+		}
+
+		if href != "" {
+			hrefs = append(hrefs, href)
+		}
+	}
+
+	return hrefs, nil
+}
+
+// Step04_PresentList_CheckHyperlinks iterates over every HTML file in the present list,
+// extracts local hyperlinks, and checks each target against the present/missing/unlisted lists.
+// Targets not in any list are classified by checking disk existence.
+func Step04_PresentList_CheckHyperlinks(projectDir string) error {
+	fmt.Printf("Step 4 - checking hyperlinks in present HTML files...\n")
+
+	itemsMissingBefore := len(missing)
+	itemsUnlistedBefore := len(unlisted)
+	totalHrefs := 0
+
+	for _, f := range present {
+		ext := strings.ToLower(filepath.Ext(f))
+		if ext != ".html" && ext != ".htm" {
+			continue
+		}
+
+		fullPath := f
+		if !filepath.IsAbs(f) {
+			fullPath = filepath.Join(projectDir, f)
+		}
+
+		hrefs, err := extractHrefsFromFile(fullPath)
+		if err != nil {
+			fmt.Printf("    warning: %v\n", err)
+			continue
+		}
+
+		fileDir := filepath.Dir(fullPath)
+
+		for _, href := range hrefs {
+			if !isLocalHref(href) {
+				continue
+			}
+
+			totalHrefs++
+
+			targetPath := href
+			if !filepath.IsAbs(href) {
+				targetPath = filepath.Join(fileDir, href)
+			}
+
+			relPath, err := filepath.Rel(projectDir, targetPath)
+			if err != nil {
+				relPath = href
+			}
+
+			key := strings.ToLower(relPath)
+
+			if presentSet[key] {
+				continue
+			}
+			if missingSet[key] {
+				continue
+			}
+			if unlistedSet[key] {
+				continue
+			}
+
+			if _, err := os.Stat(targetPath); err == nil {
+				addIfNew(&unlisted, &unlistedSet, relPath)
+			} else {
+				addIfNew(&missing, &missingSet, relPath)
+			}
+		}
+	}
+
+	fmt.Printf("    %d hyperlinks checked (+%d missing, +%d unlisted)\n\n", totalHrefs,
+		len(missing)-itemsMissingBefore, len(unlisted)-itemsUnlistedBefore)
 
 	return nil
 }
@@ -478,6 +622,13 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
+	}
+
+	// Step 04 - check hyperlinks in all present HTML files
+	err = Step04_PresentList_CheckHyperlinks(projectDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
 	}
 
 	// Print the final summary report
