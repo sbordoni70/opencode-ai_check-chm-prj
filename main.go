@@ -609,20 +609,18 @@ func OutputFinalReport() {
 		for _, f := range missing {
 			fmt.Printf("%s\n", f)
 		}
-		fmt.Printf("\n")
 	}
 	// report unlisted items
 	items = len(unlisted)
-	fmt.Printf("---- Unlisted files to be added to HHP file: %d\n", items)
+	fmt.Printf("\n---- Unlisted files to be added to HHP file: %d\n", items)
 	if items > 0 {
 		sort.Strings(unlisted)
 		for _, f := range unlisted {
 			fmt.Printf("%s\n", f)
 		}
-		fmt.Printf("\n")
 	}
 	// print footer
-	fmt.Printf("\n============================================================\n\n")
+	fmt.Printf("\n\n============================================================\n\n")
 }
 
 func main() {
