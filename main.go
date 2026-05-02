@@ -532,6 +532,78 @@ func Step04_PresentList_CheckHyperlinks(projectDir string) error {
 	return nil
 }
 
+// Step05_UnlistedList_CheckHyperlinks iterates over every HTML file in the unlisted list,
+// extracts local hyperlinks, and checks each target against the present/missing/unlisted lists.
+// Targets not in any list are classified by checking disk existence.
+func Step05_UnlistedList_CheckHyperlinks(projectDir string) error {
+	fmt.Printf("Step 5 - checking hyperlinks in unlisted HTML files...\n")
+
+	itemsMissingBefore := len(missing)
+	itemsUnlistedBefore := len(unlisted)
+	totalHrefs := 0
+
+	for _, f := range unlisted {
+		ext := strings.ToLower(filepath.Ext(f))
+		if ext != ".html" && ext != ".htm" {
+			continue
+		}
+
+		fullPath := f
+		if !filepath.IsAbs(f) {
+			fullPath = filepath.Join(projectDir, f)
+		}
+
+		hrefs, err := extractHrefsFromFile(fullPath)
+		if err != nil {
+			fmt.Printf("    warning: %v\n", err)
+			continue
+		}
+
+		fileDir := filepath.Dir(fullPath)
+
+		for _, href := range hrefs {
+			if !isLocalHref(href) {
+				continue
+			}
+
+			totalHrefs++
+
+			targetPath := href
+			if !filepath.IsAbs(href) {
+				targetPath = filepath.Join(fileDir, href)
+			}
+
+			relPath, err := filepath.Rel(projectDir, targetPath)
+			if err != nil {
+				relPath = href
+			}
+
+			key := strings.ToLower(relPath)
+
+			if presentSet[key] {
+				continue
+			}
+			if missingSet[key] {
+				continue
+			}
+			if unlistedSet[key] {
+				continue
+			}
+
+			if _, err := os.Stat(targetPath); err == nil {
+				addIfNew(&unlisted, &unlistedSet, relPath)
+			} else {
+				addIfNew(&missing, &missingSet, relPath)
+			}
+		}
+	}
+
+	fmt.Printf("    %d hyperlinks checked (+%d missing, +%d unlisted)\n\n", totalHrefs,
+		len(missing)-itemsMissingBefore, len(unlisted)-itemsUnlistedBefore)
+
+	return nil
+}
+
 // OutputFinalReport prints a summary of all three file categories.
 func OutputFinalReport() {
 
@@ -626,6 +698,13 @@ func main() {
 
 	// Step 04 - check hyperlinks in all present HTML files
 	err = Step04_PresentList_CheckHyperlinks(projectDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Step 05 - check hyperlinks in all unlisted HTML files
+	err = Step05_UnlistedList_CheckHyperlinks(projectDir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
