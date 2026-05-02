@@ -9,6 +9,11 @@ import (
 	"strings"
 )
 
+const (
+	ProgramName = "check-chm-prj"
+	Version     = "2026.05.0"
+)
+
 // Global tracking lists and dedup sets for three categories of files.
 var (
 	present     []string
@@ -612,7 +617,7 @@ func OutputFinalReport() {
 	fmt.Printf("==== Present files: %d\n\n", len(present))
 	// report missing items
 	items := len(missing)
-	fmt.Printf("==== Missing files: %d\n", items)
+	fmt.Printf("==== Missing files (i.e. broken links/references): %d\n", items)
 	if items > 0 {
 		sort.Strings(missing)
 		for _, f := range missing {
@@ -622,7 +627,7 @@ func OutputFinalReport() {
 	}
 	// report unlisted items
 	items = len(unlisted)
-	fmt.Printf("==== Unlisted (used but not present in HHP file) files: %d\n", items)
+	fmt.Printf("==== Unlisted files to be added to HHP file: %d\n", items)
 	if items > 0 {
 		sort.Strings(unlisted)
 		for _, f := range unlisted {
@@ -637,6 +642,9 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Usage: %s <project-folder>\n", os.Args[0])
 		os.Exit(1)
 	}
+
+	// print program header
+	fmt.Fprintf(os.Stderr, "\n  %s v%s\n  CHM Project File Validator\n\n", ProgramName, Version)
 
 	projectDir := os.Args[1]
 
