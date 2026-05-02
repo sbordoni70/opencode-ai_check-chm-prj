@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -389,13 +390,15 @@ func Step03_ProcessFile_HHK(projectDir string, hhkPath string) error {
 
 // OutputFinalReport prints a summary of all three file categories.
 func OutputFinalReport() {
+
 	fmt.Printf("\n--- Final Report ---\n\n")
 	// report present files
-	fmt.Printf("==== Present files: %d\n", len(present))
+	fmt.Printf("==== Present files: %d\n\n", len(present))
 	// report missing items
 	items := len(missing)
 	fmt.Printf("==== Missing files: %d\n", items)
 	if items > 0 {
+		sort.Strings(missing)
 		for _, f := range missing {
 			fmt.Printf("%s\n", f)
 		}
@@ -403,8 +406,9 @@ func OutputFinalReport() {
 	}
 	// report unlisted items
 	items = len(unlisted)
-	fmt.Printf("==== Unlisted files: %d\n", items)
+	fmt.Printf("==== Unlisted (used but not present in HHP file) files: %d\n", items)
 	if items > 0 {
+		sort.Strings(unlisted)
 		for _, f := range unlisted {
 			fmt.Printf("%s\n", f)
 		}
