@@ -638,13 +638,14 @@ func OutputFinalReport() {
 }
 
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Fprintf(os.Stderr, "Usage: %s <project-folder>\n", os.Args[0])
-		os.Exit(1)
-	}
 
 	// print program header
-	fmt.Fprintf(os.Stderr, "\n  %s v%s\n  CHM Project File Validator\n\n", ProgramName, Version)
+	fmt.Fprintf(os.Stderr, "\n%s v%s\n  a small utility to check & report problems inCHM project HTML files references\n\n", ProgramName, Version)
+
+	if len(os.Args) < 2 {
+		fmt.Fprintf(os.Stderr, "  Usage: %s <project-folder>\n", os.Args[0])
+		os.Exit(1)
+	}
 
 	projectDir := os.Args[1]
 
