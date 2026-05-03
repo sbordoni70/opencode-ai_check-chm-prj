@@ -4,10 +4,10 @@
   "language": "Go",
   "description": "CLI tool that validates Microsoft HTML Help Workshop (.hhp/.hhc/.hhk) project files by checking for missing source files and files referenced outside the project manifest.",
   "last_session": "2026-05-02T00:00:00Z",
-  "status": "build passes, HHC/HHK parsing simplified, valueStartAbs bug fixed, report output updated",
+  "status": "build passes, case-insensitive string helpers in strings_no_case.go, all strings.Index replaced with no_case_SeekSubstring",
   "conventions": {
     "naming": "Functions use snake_case with underscores for multi-word names (e.g. parse_HHP_section_FILES, Step01_ProcessFile_HHP, isLocalHref, extractHrefsFromFile)",
-    "file_structure": "Single main.go file, no packages beyond stdlib",
+    "file_structure": "main.go + strings_no_case.go for case-insensitive helpers, no packages beyond stdlib",
     "build": "go build -o check-chm-prj.exe .",
     "exit_codes": {
       "0": "All files accounted for",
@@ -36,7 +36,9 @@
     "Added program banner with customizable ProgramName and Version constants",
     "Fixed parse_HHK_object_param_Local: valueStartAbs was incorrectly used as absolute index into nameLower instead of relative index into remain",
     "Simplified HHC & HHK parsing: removed .ToLower() conversion as resulting string was longer than original",
-    "Updated report output with ==== and ---- prefixes and conditional listing"
+    "Updated report output with ==== and ---- prefixes and conditional listing",
+    "Added strings_no_case.go with no_case_areCharsEqual, no_case_HasPrefix, no_case_IsEqual, no_case_SeekSubstring",
+    "Replaced all strings.Index calls with no_case_SeekSubstring for case-insensitive substring search"
   ],
   "files": {
     "source": ["main.go"],
