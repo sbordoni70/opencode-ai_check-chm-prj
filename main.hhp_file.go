@@ -9,9 +9,9 @@ import (
 )
 
 // findHhpFile walks the given directory tree and returns the first .hhp file found.
-func findHhpFile(dir string) (string, error) {
+func findHhpFile() (string, error) {
 	var hhpFile string
-	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+	err := filepath.Walk(project_dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -25,7 +25,7 @@ func findHhpFile(dir string) (string, error) {
 		return "", err
 	}
 	if hhpFile == "" {
-		return "", fmt.Errorf("no .hhp file found in %s", dir)
+		return "", fmt.Errorf("no .hhp file found in %s", project_dir)
 	}
 	return hhpFile, nil
 }
@@ -111,22 +111,22 @@ func parse_HHP_section_FILES(hhpPath string) ([]string, error) {
 
 // Step01_ProcessFile_HHP checks every file listed in the HHP [FILES] section
 // and classifies each as present (found on disk) or missing.
-func Step01_ProcessFile_HHP(projectDir string, hhpPath string) error {
+func Step01_ProcessFile_HHP(hhpPath string) error {
 	fmt.Printf("Step 1 - importing HHP file and checking the listed files...\n")
 	files, err := parse_HHP_section_FILES(hhpPath)
 	if err != nil {
 		return fmt.Errorf("cannot parse %s: %w", hhpPath, err)
 	}
 
-	for _, f := range files {
-		fullPath := f
-		if !filepath.IsAbs(f) {
-			fullPath = filepath.Join(projectDir, f)
+	for _, item := range files {
+		fullPath := item
+		if !filepath.IsAbs(item) {
+			fullPath = filepath.Join(project_dir, item)
 		}
 		if _, err := os.Stat(fullPath); err == nil {
-			list_addIfNew(&present_list, &presentSet, f)
+			list_addIfNew(&present_list, &presentSet, item)
 		} else {
-			list_missing_addIfNew(f, ".HHP")
+			list_missing_addIfNew(item, ".HHP")
 		}
 	}
 

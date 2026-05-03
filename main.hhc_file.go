@@ -73,7 +73,7 @@ func parse_HHC_object_param_Local(hhcPath string) ([]string, error) {
 // Step02_ProcessFile_HHC checks every file referenced in the HHC table-of-contents.
 // A reference that exists on disk but isn't in the HHP [FILES] list is marked unlisted.
 // A reference that doesn't exist on disk is marked missing.
-func Step02_ProcessFile_HHC(projectDir string, hhcPath string) error {
+func Step02_ProcessFile_HHC(hhcPath string) error {
 	fmt.Printf("Step 2 - importing HHC file and checking the listed files...\n")
 	localRefs, err := parse_HHC_object_param_Local(hhcPath)
 	if err != nil {

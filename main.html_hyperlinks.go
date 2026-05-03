@@ -60,23 +60,67 @@ func extractHrefsFromFile(filePath string) ([]string, error) {
 		href := aTag[valueStart : valueStart+valueEnd]
 		href = strings.TrimSpace(href)
 
+		// skip any non-local hrefs
+		if !isLocalHref(href) {
+			continue
+		}
+
+		// remove any trailing #fragment
 		idx := no_case_SeekSubstring(href, "#")
 		if idx != -1 {
 			href = href[:idx]
 		}
 
-		if href != "" {
-			hrefs = append(hrefs, href)
+		// add only if it's non-empty or meaningful
+		if (href != "") && (href != "..") && (href != ".") {
+			// try to filter and weird/invalid item
+			switch href[len(href)-1] {
+			case '\\', '/', ':', '*', '?', '"', '<', '>', '|':
+				continue
+			// is seems fine, add it to the list
+			default:
+				hrefs = append(hrefs, href)
+			}
 		}
 	}
 
 	return hrefs, nil
 }
 
+// verify href
+func verifyHref(href string, origin_dir string, origin_item string) bool {
+	// if it's not local, skip
+	if !isLocalHref(href) {
+		return true
+	}
+	// get the absolute hyperlink path...
+	href_full := filepath.Join(origin_dir, href)
+	// check if it really local link...
+	if !no_case_HasPrefix(href_full, project_dir) {
+		return true
+	}
+	// get the project relative href
+	href_rel := href_full[project_dir_len2:]
+
+	// is it already present in a list?
+	key := strings.ToLower(href_rel)
+	if presentSet[key] || missingSet[key] || unlistedSet[key] {
+		return true
+	}
+
+	// check and add to the proper list
+	if _, err := os.Stat(href_full); err == nil {
+		list_addIfNew(&unlisted_list, &unlistedSet, href_rel)
+	} else {
+		list_missing_addIfNew(href_rel, origin_item)
+	}
+	return false
+}
+
 // Step04_PresentList_CheckHyperlinks iterates over every HTML file in the present list,
 // extracts local hyperlinks, and checks each target against the present/missing/unlisted lists.
 // Targets not in any list are classified by checking disk existence.
-func Step04_PresentList_CheckHyperlinks(projectDir string) error {
+func Step04_PresentList_CheckHyperlinks() error {
 	fmt.Printf("Step 4 - checking hyperlinks in present HTML files...\n")
 
 	itemsMissingBefore := len(missing_list)
@@ -84,58 +128,30 @@ func Step04_PresentList_CheckHyperlinks(projectDir string) error {
 	totalHrefs := 0
 
 	for _, item := range present_list {
+		// check file type by extension
 		ext := filepath.Ext(item)
 		if !no_case_IsEqual(ext, ".html") && !no_case_IsEqual(ext, ".htm") {
 			continue
 		}
 
-		fullPath := item
+		// get the full path of this HTML file
+		item_full := item
 		if !filepath.IsAbs(item) {
-			fullPath = filepath.Join(projectDir, item)
+			item_full = filepath.Join(project_dir, item)
 		}
 
-		hrefs, err := extractHrefsFromFile(fullPath)
+		// extract the hyperlinks of this file
+		hrefs, err := extractHrefsFromFile(item_full)
 		if err != nil {
 			fmt.Printf("    warning: %v\n", err)
 			continue
 		}
 
-		fileDir := filepath.Dir(fullPath)
-
-		for _, href := range hrefs {
-			if !isLocalHref(href) {
-				continue
-			}
-
+		// check each href and update lists accordingly
+		item_dir := filepath.Dir(item_full)
+		for _, item_hr := range hrefs {
 			totalHrefs++
-
-			targetPath := href
-			if !filepath.IsAbs(href) {
-				targetPath = filepath.Join(fileDir, href)
-			}
-
-			relPath, err := filepath.Rel(projectDir, targetPath)
-			if err != nil {
-				relPath = href
-			}
-
-			key := strings.ToLower(relPath)
-
-			if presentSet[key] {
-				continue
-			}
-			if missingSet[key] {
-				continue
-			}
-			if unlistedSet[key] {
-				continue
-			}
-
-			if _, err := os.Stat(targetPath); err == nil {
-				list_addIfNew(&unlisted_list, &unlistedSet, relPath)
-			} else {
-				list_missing_addIfNew(relPath, item)
-			}
+			verifyHref(item_hr, item_dir, item)
 		}
 	}
 
@@ -148,66 +164,47 @@ func Step04_PresentList_CheckHyperlinks(projectDir string) error {
 // Step05_UnlistedList_CheckHyperlinks iterates over every HTML file in the unlisted list,
 // extracts local hyperlinks, and checks each target against the present/missing/unlisted lists.
 // Targets not in any list are classified by checking disk existence.
-func Step05_UnlistedList_CheckHyperlinks(projectDir string) error {
+func Step05_UnlistedList_CheckHyperlinks() error {
 	fmt.Printf("Step 5 - checking hyperlinks in unlisted HTML files...\n")
 
 	itemsMissingBefore := len(missing_list)
 	itemsUnlistedBefore := len(unlisted_list)
 	totalHrefs := 0
 
-	for _, item := range unlisted_list {
+	max_items := itemsUnlistedBefore
+	for i := 0; i < max_items; i++ {
+		item := unlisted_list[i]
+		// check file type by extension
 		ext := filepath.Ext(item)
 		if !no_case_IsEqual(ext, ".html") && !no_case_IsEqual(ext, ".htm") {
 			continue
 		}
 
-		fullPath := item
+		// get the full path
+		item_full := item
 		if !filepath.IsAbs(item) {
-			fullPath = filepath.Join(projectDir, item)
+			item_full = filepath.Join(project_dir, item)
 		}
 
-		hrefs, err := extractHrefsFromFile(fullPath)
+		// extract the hyperlinks of this file
+		hrefs, err := extractHrefsFromFile(item_full)
 		if err != nil {
 			fmt.Printf("    warning: %v\n", err)
 			continue
 		}
 
-		fileDir := filepath.Dir(fullPath)
-
-		for _, href := range hrefs {
-			if !isLocalHref(href) {
-				continue
-			}
-
+		// check each hyperlink in the unlisted HTML file
+		bUpdateMaxItems := false
+		item_dir := filepath.Dir(item_full)
+		for _, item_hr := range hrefs {
 			totalHrefs++
-
-			targetPath := href
-			if !filepath.IsAbs(href) {
-				targetPath = filepath.Join(fileDir, href)
+			if !verifyHref(item_hr, item_dir, item) {
+				bUpdateMaxItems = true
 			}
-
-			relPath, err := filepath.Rel(projectDir, targetPath)
-			if err != nil {
-				relPath = href
-			}
-
-			key := strings.ToLower(relPath)
-
-			if presentSet[key] {
-				continue
-			}
-			if missingSet[key] {
-				continue
-			}
-			if unlistedSet[key] {
-				continue
-			}
-
-			if _, err := os.Stat(targetPath); err == nil {
-				list_addIfNew(&unlisted_list, &unlistedSet, relPath)
-			} else {
-				list_missing_addIfNew(relPath, item)
-			}
+		}
+		// update maxitems if needed
+		if bUpdateMaxItems {
+			max_items = len(unlisted_list)
 		}
 	}
 

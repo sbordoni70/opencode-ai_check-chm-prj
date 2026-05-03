@@ -72,7 +72,7 @@ func parse_HHK_object_param_Local(hhkPath string) ([]string, error) {
 // Step03_ProcessFile_HHK checks every file referenced in the HHK index file.
 // A reference that exists on disk but isn't in the HHP [FILES] list is marked unlisted.
 // A reference that doesn't exist on disk is marked missing.
-func Step03_ProcessFile_HHK(projectDir string, hhkPath string) error {
+func Step03_ProcessFile_HHK(hhkPath string) error {
 	fmt.Printf("Step 3 - importing HHK file and checking the listed files...\n")
 	localRefs, err := parse_HHK_object_param_Local(hhkPath)
 	if err != nil {
