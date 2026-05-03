@@ -81,8 +81,8 @@ func Step02_ProcessFile_HHC(projectDir string, hhcPath string) error {
 	}
 
 	// Snapshot current counts so we can report incremental deltas
-	items_missing := len(missing)
-	items_unlisted := len(unlisted)
+	items_missing := len(missing_list)
+	items_unlisted := len(unlisted_list)
 
 	hhcDir := filepath.Dir(hhcPath)
 
@@ -101,17 +101,17 @@ func Step02_ProcessFile_HHC(projectDir string, hhcPath string) error {
 		_, statErr := os.Stat(fullPath)
 		if statErr != nil {
 			// File doesn't exist on disk
-			addIfNew(&missing, &missingSet, ref)
+			list_missing_addIfNew(ref, ".HHC")
 		} else if !presentSet[strings.ToLower(relPath)] {
 			// File exists but wasn't listed in the HHP [FILES] section
-			addIfNew(&unlisted, &unlistedSet, relPath)
+			list_addIfNew(&unlisted_list, &unlistedSet, relPath)
 		}
 	}
 
 	items_processed := len(localRefs)
 
 	fmt.Printf("    %d files listed (+%d missing, +%d unlisted)\n\n", items_processed,
-		len(missing)-items_missing, len(unlisted)-items_unlisted)
+		len(missing_list)-items_missing, len(unlisted_list)-items_unlisted)
 
 	return nil
 }

@@ -10,28 +10,36 @@ import (
 
 const (
 	ProgramName = "check-chm-prj"
-	Version     = "2026.05.2.0"
+	Version     = "2026.05.3.0"
 )
 
 // Global tracking lists and dedup sets for three categories of files.
 var (
-	present     []string
-	missing     []string
-	missing_ref []string
-	unlisted    []string
-	presentSet  = make(map[string]bool)
-	missingSet  = make(map[string]bool)
-	unlistedSet = make(map[string]bool)
+	present_list     []string
+	missing_list     []string
+	missing_ref_list []string
+	unlisted_list    []string
+	presentSet       = make(map[string]bool)
+	missingSet       = make(map[string]bool)
+	unlistedSet      = make(map[string]bool)
 )
 
-// addIfNew appends an item to a list only if it hasn't been seen before (case-insensitive).
-func addIfNew(list *[]string, set *map[string]bool, item string) {
+// list_addIfNew appends an item to a list only if it hasn't been seen before (case-insensitive).
+func list_addIfNew(list *[]string, set *map[string]bool, item string) bool {
 	key := strings.ToLower(item)
 	if (*set)[key] {
-		return
+		return false
 	}
 	(*set)[key] = true
 	*list = append(*list, item)
+	return true
+}
+
+// like list_addIfNew but for missing list only
+func list_missing_addIfNew(item string, ref string) {
+	if list_addIfNew(&missing_list, &missingSet, item) {
+		missing_ref_list = append(missing_ref_list, ref)
+	}
 }
 
 // OutputFinalReport prints a summary of all three file categories.
@@ -39,22 +47,22 @@ func OutputFinalReport() {
 	// print header
 	fmt.Printf("\n==== Final Report ==========================================\n\n")
 	// report present files
-	fmt.Printf("---- Present files: %d\n\n", len(present))
+	fmt.Printf("---- Present files: %d\n\n", len(present_list))
 	// report missing items
-	items := len(missing)
+	items := len(missing_list)
 	fmt.Printf("---- Missing files (i.e. broken links/references): %d\n", items)
 	if items > 0 {
-		sort.Strings(missing)
-		for _, f := range missing {
-			fmt.Printf("%s\n", f)
+		//sort.Strings(missing_list)
+		for i := 0; i < items; i++ {
+			fmt.Printf("%s ---> from %s\n", missing_list[i], missing_ref_list[i])
 		}
 	}
 	// report unlisted items
-	items = len(unlisted)
+	items = len(unlisted_list)
 	fmt.Printf("\n---- Unlisted files to be added to HHP file: %d\n", items)
 	if items > 0 {
-		sort.Strings(unlisted)
-		for _, f := range unlisted {
+		sort.Strings(unlisted_list)
+		for _, f := range unlisted_list {
 			fmt.Printf("%s\n", f)
 		}
 	}
@@ -149,8 +157,5 @@ func main() {
 	// Print the final summary report
 	OutputFinalReport()
 
-	// Exit with code 2 if any files are missing
-	if len(missing) > 0 {
-		os.Exit(2)
-	}
+	os.Exit(0)
 }

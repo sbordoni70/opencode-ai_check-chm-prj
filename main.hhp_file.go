@@ -45,20 +45,17 @@ func parse_HHP_section_OPTIONS(hhpPath string, entry string) (string, error) {
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 
-		// Enter [OPTIONS] section
-		if strings.ToUpper(line) == "[OPTIONS]" {
-			inOptions = true
-			continue
+		// look for the need section...
+		if line[0] == '[' {
+			inOptions = no_case_IsEqual(line, "[OPTIONS]")
 		}
-
 		if inOptions {
 			// Blank line or next section header means we've left [OPTIONS]
-			if line == "" || (strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]")) {
+			if line == "" {
 				break
 			}
-			lower := strings.ToLower(line)
 			prefix := entry + "="
-			if strings.HasPrefix(lower, prefix) {
+			if no_case_HasPrefix(line, prefix) {
 				idx := no_case_SeekSubstring(line, "=")
 				val := strings.TrimSpace(line[idx+1:])
 				return val, nil
@@ -88,7 +85,7 @@ func parse_HHP_section_FILES(hhpPath string) ([]string, error) {
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 
-		if section := strings.ToUpper(line); section == "[FILES]" {
+		if !inFilesSection && no_case_IsEqual(line, "[FILES]") {
 			inFilesSection = true
 			continue
 		}
@@ -127,14 +124,14 @@ func Step01_ProcessFile_HHP(projectDir string, hhpPath string) error {
 			fullPath = filepath.Join(projectDir, f)
 		}
 		if _, err := os.Stat(fullPath); err == nil {
-			addIfNew(&present, &presentSet, f)
+			list_addIfNew(&present_list, &presentSet, f)
 		} else {
-			addIfNew(&missing, &missingSet, f)
+			list_missing_addIfNew(f, ".HHP")
 		}
 	}
 
-	total := len(present) + len(missing)
-	fmt.Printf("    %d files listed (%d present, %d missing)\n", total, len(present), len(missing))
+	total := len(present_list) + len(missing_list)
+	fmt.Printf("    %d files listed (%d present, %d missing)\n", total, len(present_list), len(missing_list))
 
 	return nil
 }

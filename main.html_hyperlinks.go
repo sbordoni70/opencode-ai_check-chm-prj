@@ -79,19 +79,19 @@ func extractHrefsFromFile(filePath string) ([]string, error) {
 func Step04_PresentList_CheckHyperlinks(projectDir string) error {
 	fmt.Printf("Step 4 - checking hyperlinks in present HTML files...\n")
 
-	itemsMissingBefore := len(missing)
-	itemsUnlistedBefore := len(unlisted)
+	itemsMissingBefore := len(missing_list)
+	itemsUnlistedBefore := len(unlisted_list)
 	totalHrefs := 0
 
-	for _, f := range present {
-		ext := filepath.Ext(f)
+	for _, item := range present_list {
+		ext := filepath.Ext(item)
 		if !no_case_IsEqual(ext, ".html") && !no_case_IsEqual(ext, ".htm") {
 			continue
 		}
 
-		fullPath := f
-		if !filepath.IsAbs(f) {
-			fullPath = filepath.Join(projectDir, f)
+		fullPath := item
+		if !filepath.IsAbs(item) {
+			fullPath = filepath.Join(projectDir, item)
 		}
 
 		hrefs, err := extractHrefsFromFile(fullPath)
@@ -132,15 +132,15 @@ func Step04_PresentList_CheckHyperlinks(projectDir string) error {
 			}
 
 			if _, err := os.Stat(targetPath); err == nil {
-				addIfNew(&unlisted, &unlistedSet, relPath)
+				list_addIfNew(&unlisted_list, &unlistedSet, relPath)
 			} else {
-				addIfNew(&missing, &missingSet, relPath)
+				list_missing_addIfNew(relPath, item)
 			}
 		}
 	}
 
 	fmt.Printf("    %d hyperlinks checked (+%d missing, +%d unlisted)\n\n", totalHrefs,
-		len(missing)-itemsMissingBefore, len(unlisted)-itemsUnlistedBefore)
+		len(missing_list)-itemsMissingBefore, len(unlisted_list)-itemsUnlistedBefore)
 
 	return nil
 }
@@ -151,19 +151,19 @@ func Step04_PresentList_CheckHyperlinks(projectDir string) error {
 func Step05_UnlistedList_CheckHyperlinks(projectDir string) error {
 	fmt.Printf("Step 5 - checking hyperlinks in unlisted HTML files...\n")
 
-	itemsMissingBefore := len(missing)
-	itemsUnlistedBefore := len(unlisted)
+	itemsMissingBefore := len(missing_list)
+	itemsUnlistedBefore := len(unlisted_list)
 	totalHrefs := 0
 
-	for _, f := range unlisted {
-		ext := filepath.Ext(f)
+	for _, item := range unlisted_list {
+		ext := filepath.Ext(item)
 		if !no_case_IsEqual(ext, ".html") && !no_case_IsEqual(ext, ".htm") {
 			continue
 		}
 
-		fullPath := f
-		if !filepath.IsAbs(f) {
-			fullPath = filepath.Join(projectDir, f)
+		fullPath := item
+		if !filepath.IsAbs(item) {
+			fullPath = filepath.Join(projectDir, item)
 		}
 
 		hrefs, err := extractHrefsFromFile(fullPath)
@@ -204,15 +204,15 @@ func Step05_UnlistedList_CheckHyperlinks(projectDir string) error {
 			}
 
 			if _, err := os.Stat(targetPath); err == nil {
-				addIfNew(&unlisted, &unlistedSet, relPath)
+				list_addIfNew(&unlisted_list, &unlistedSet, relPath)
 			} else {
-				addIfNew(&missing, &missingSet, relPath)
+				list_missing_addIfNew(relPath, item)
 			}
 		}
 	}
 
 	fmt.Printf("    %d hyperlinks checked (+%d missing, +%d unlisted)\n\n", totalHrefs,
-		len(missing)-itemsMissingBefore, len(unlisted)-itemsUnlistedBefore)
+		len(missing_list)-itemsMissingBefore, len(unlisted_list)-itemsUnlistedBefore)
 
 	return nil
 }

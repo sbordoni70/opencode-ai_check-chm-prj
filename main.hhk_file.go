@@ -79,35 +79,35 @@ func Step03_ProcessFile_HHK(projectDir string, hhkPath string) error {
 		return fmt.Errorf("cannot parse %s: %w", hhkPath, err)
 	}
 
-	items_missing := len(missing)
-	items_unlisted := len(unlisted)
+	items_missing := len(missing_list)
+	items_unlisted := len(unlisted_list)
 
 	hhkDir := filepath.Dir(hhkPath)
 
-	for _, ref := range localRefs {
+	for _, item := range localRefs {
 		// if it's in the present set,... no need to check anything
-		if presentSet[strings.ToLower(ref)] {
+		if presentSet[strings.ToLower(item)] {
 			continue
 		}
 
 		// else we need to understand where to put it
-		fullPath := ref
-		if !filepath.IsAbs(ref) {
-			fullPath = filepath.Join(hhkDir, ref)
+		fullPath := item
+		if !filepath.IsAbs(item) {
+			fullPath = filepath.Join(hhkDir, item)
 		}
 
 		_, statErr := os.Stat(fullPath)
 		if statErr != nil {
-			addIfNew(&missing, &missingSet, ref)
+			list_missing_addIfNew(item, ".HHK")
 		} else {
-			addIfNew(&unlisted, &unlistedSet, ref)
+			list_addIfNew(&unlisted_list, &unlistedSet, item)
 		}
 	}
 
 	items_processed := len(localRefs)
 
 	fmt.Printf("    %d files listed (+%d missing, +%d unlisted)\n\n", items_processed,
-		len(missing)-items_missing, len(unlisted)-items_unlisted)
+		len(missing_list)-items_missing, len(unlisted_list)-items_unlisted)
 
 	return nil
 }
