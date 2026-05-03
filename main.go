@@ -10,7 +10,7 @@ import (
 
 const (
 	ProgramName = "check-chm-prj"
-	Version     = "2026.05.4.0"
+	Version     = "2026.05.4.1"
 )
 
 // Global tracking lists and dedup sets for three categories of files.
@@ -19,9 +19,11 @@ var (
 	project_dir_len  int
 	project_dir_len2 int
 	present_list     []string
+	unlisted_list    []string
 	missing_list     []string
 	missing_ref_list []string
-	unlisted_list    []string
+	invalid_list     []string
+	invalid_ref_list []string
 	presentSet       = make(map[string]bool)
 	missingSet       = make(map[string]bool)
 	unlistedSet      = make(map[string]bool)
@@ -36,6 +38,12 @@ func list_addIfNew(list *[]string, set *map[string]bool, item string) bool {
 	(*set)[key] = true
 	*list = append(*list, item)
 	return true
+}
+
+// like list_addIfNew but for missing list only
+func list_invalid_addIfNew(item string, ref string) {
+	invalid_list = append(invalid_list, item)
+	invalid_ref_list = append(invalid_ref_list, ref)
 }
 
 // like list_addIfNew but for missing list only
@@ -69,6 +77,15 @@ func OutputFinalReport() {
 			fmt.Printf("%s\n", f)
 		}
 	}
+	// invalid items
+	items = len(invalid_list)
+	if items > 0 {
+		fmt.Printf("\n---- invalid/malformed local URLs: %d\n", items)
+		//sort.Strings(invalid_list)
+		for i := 0; i < items; i++ {
+			fmt.Printf("\"%s\"\n > from: %s\n", invalid_list[i], invalid_ref_list[i])
+		}
+	}
 	// print footer
 	fmt.Printf("\n\n============================================================\n\n")
 }
@@ -78,18 +95,24 @@ func main() {
 	// print program header
 	fmt.Fprintf(os.Stderr, "\n%s v%s\n  a small utility to check & report HTML files references problems in CHM project\n\n", ProgramName, Version)
 
-	/*
-		if len(os.Args) < 2 {
-			fmt.Fprintf(os.Stderr, "  Usage: %s <project-folder>\n", ProgramName)
-			os.Exit(1)
-		}
-	*/
+	if len(os.Args) < 2 {
+		fmt.Fprintf(os.Stderr, "  Usage: %s <project-folder>\n", ProgramName)
+		os.Exit(1)
+	}
 
 	// set project dir
-	//project_dir = os.Args[1]
-	project_dir = "v:\\work\\0-git\\WinEPTS Tech. Ref"
+	project_dir = os.Args[1]
+	if !filepath.IsAbs(project_dir) {
+		absDir, err := filepath.Abs(project_dir)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: invalid directory (err: %v)\n", err)
+			os.Exit(1)
+		}
+		project_dir = absDir
+	}
 
-	fmt.Fprintf(os.Stderr, "project dir:  \"%s\"\n\n", project_dir)
+	// let's go
+	fmt.Fprintf(os.Stderr, "-project dir:  \"%s\"\n\n", project_dir)
 
 	if _, err := os.Stat(project_dir); os.IsNotExist(err) {
 		fmt.Fprintf(os.Stderr, "Error: directory %s does not exist\n", project_dir)
@@ -113,7 +136,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("Found HHP file: %s\n", hhpPath[project_dir_len2:])
+	fmt.Printf("-found HHP file: %s\n", hhpPath[project_dir_len2:])
 
 	err = Step01_ProcessFile_HHP(hhpPath)
 	if err != nil {
@@ -130,7 +153,7 @@ func main() {
 		if !filepath.IsAbs(hhcRelPath) {
 			hhcPath = filepath.Join(filepath.Dir(hhpPath), hhcRelPath)
 		}
-		fmt.Printf("\nFound HHC file: %s\n", hhcPath[project_dir_len2:])
+		fmt.Printf("\n-found HHC file: %s\n", hhcPath[project_dir_len2:])
 
 		err := Step02_ProcessFile_HHC(hhcPath)
 		if err != nil {
@@ -148,7 +171,7 @@ func main() {
 		if !filepath.IsAbs(hhkRelPath) {
 			hhkPath = filepath.Join(filepath.Dir(hhpPath), hhkRelPath)
 		}
-		fmt.Printf("\nFound index file: %s\n", hhkPath[project_dir_len2:])
+		fmt.Printf("\n-found HHK file: %s\n", hhkPath[project_dir_len2:])
 
 		err := Step03_ProcessFile_HHK(hhkPath)
 		if err != nil {

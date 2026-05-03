@@ -1,21 +1,22 @@
 # check-chm-prj
 
-A command-line tool that validates Microsoft HTML Help Workshop project files by checking for missing source files, files referenced outside the project manifest, and broken hyperlinks within HTML files.
+A command-line tool that validates Microsoft HTML Help Workshop project files by checking for missing source files, files referenced outside the project manifest, broken hyperlinks within HTML files, and malformed local URLs.
 
 ## What It Does
 
 The tool performs a five-phase audit of a CHM help project directory:
 
 1. **HHP Analysis** — Parses the `[FILES]` section of the `.hhp` project file and verifies that every listed file exists on disk.
-2. **HHC Analysis** — Parses the `.hhc` table-of-contents file, extracts all `name="local"` references from `<object>` tags, and cross-references them against the HHP manifest.
-3. **HHK Analysis** — Parses the `.hhk` index file, extracts all `name="local"` references from `<object>` tags (including multiple references per object), and cross-references them against the HHP manifest.
+2. **HHC Analysis** — Reads the HHC file path from the HHP `[OPTIONS]` section, parses the table-of-contents file, extracts all `name="local"` references from `<object>` tags, and cross-references them against the HHP manifest.
+3. **HHK Analysis** — Reads the HHK file path from the HHP `[OPTIONS]` section, parses the index file, extracts all `name="local"` references from `<object>` tags (including multiple references per object), and cross-references them against the HHP manifest.
 4. **Hyperlink Validation (Present)** — Extracts all local hyperlinks from every HTML file in the present list, resolves them against the manifest, and classifies unknown targets by checking disk existence.
 5. **Hyperlink Validation (Unlisted)** — Repeats hyperlink extraction on every file in the unlisted list, discovering additional missing or unlisted files transitively.
 
-At the end it produces a final report with three categories:
+At the end it produces a final report with four categories:
 - **Present** — files listed in the HHP and found on disk
-- **Missing** — files referenced but not found on disk
+- **Missing** — files referenced but not found on disk (each entry shows the source file that references it)
 - **Unlisted** — files found on disk and referenced in the HHC, HHK, or HTML hyperlinks, but missing from the HHP `[FILES]` section
+- **Invalid** — malformed local URLs (e.g. `"."`, `".."`, or URLs ending in special characters)
 
 ## Building
 
@@ -31,7 +32,7 @@ go build -o check-chm-prj.exe .
 check-chm-prj.exe <project-folder>
 ```
 
-The tool will recursively search `<project-folder>` for a `.hhp` file, and optional `.hhc` and `.hhk` files.
+The tool will recursively search `<project-folder>` for a `.hhp` file. The `.hhc` and `.hhk` file paths are then read from the HHP's `[OPTIONS]` section. The program header and project directory info are printed to stderr; step progress and the final report go to stdout.
 
 ### Exit Codes
 
@@ -44,18 +45,20 @@ The tool will recursively search `<project-folder>` for a `.hhp` file, and optio
 ### Example Output
 
 ```
-  check-chm-prj v2026.05.1.0
+check-chm-prj v2026.05.4.1
   a small utility to check & report HTML files references problems in CHM project
 
-Found project file: C:\help\myproject.hhp
+-project dir:  "C:\help"
+
+-found HHP file: myproject.hhp
 Step 1 - importing HHP file and checking the listed files...
     42 files listed (38 present, 4 missing)
 
-Found template file: C:\help\myproject.hhc
+-found HHC file: myproject.hhc
 Step 2 - importing HHC file and checking the listed files...
     51 files listed (+2 missing, +3 unlisted)
 
-Found index file: C:\help\myproject.hhk
+-found HHK file: myproject.hhk
 Step 3 - importing HHK file and checking the listed files...
     37 files listed (+1 missing, +1 unlisted)
 
@@ -71,23 +74,41 @@ Step 5 - checking hyperlinks in unlisted HTML files...
 
 ---- Missing files (i.e. broken links/references): 11
 intro_overview.html
+ > from: .HHP
 api_reference.html
+ > from: .HHC
 troubleshooting.html
+ > from: index.html
 changelog.html
+ > from: .HHK
 quick_start.html
+ > from: intro_overview.html
 faq.html
+ > from: .HHP
 glossary.html
+ > from: contents.html
 broken_link.html
+ > from: troubleshooting.html
 old_page.html
+ > from: changelog.html
 deprecated_api.html
+ > from: api_reference.html
 missing_image.html
+ > from: quick_start.html
 
 ---- Unlisted files to be added to HHP file: 5
-draft_notes.html
-legacy_v1.html
 appendix_b.html
-known_issues.html
+draft_notes.html
 hidden_page.html
+known_issues.html
+legacy_v1.html
+
+---- invalid/malformed local URLs: 2
+".."
+ > from: old_page.html
+"."
+ > from: deprecated_api.html
+
 
 ============================================================
 ```
@@ -104,25 +125,26 @@ The tool reads the `[OPTIONS]` section of the `.hhp` file to locate the `content
 
 ### HHC (`name="local"` references)
 
-The tool scans the `.hhc` file for `<object>` blocks and extracts the `value` attribute from the first `<param name="local" value="...">` tag found per block. These values are treated as file paths and resolved relative to the HHC file's directory.
+The tool scans the `.hhc` file for `<object>` blocks and extracts the `value` attribute from the first `<param name="local" value="...">` tag found per block. Trailing `#fragment` anchors are stripped. These values are treated as file paths and resolved relative to the HHC file's directory. Files existing on disk but not in the HHP manifest are added to the unlisted set.
 
 ### HHK (`name="local"` references)
 
-The tool scans the `.hhk` file for `<object>` blocks and extracts the `value` attribute from **all** `<param name="local" value="...">` tags within each block. A single object may reference multiple files. These values are treated as file paths and resolved relative to the HHK file's directory.
+The tool scans the `.hhk` file for `<object>` blocks and extracts the `value` attribute from **all** `<param name="local" value="...">` tags within each block. A single object may reference multiple files. Trailing `#fragment` anchors are stripped. These values are treated as file paths and resolved relative to the HHK file's directory.
 
 ### HTML Hyperlinks (Steps 4-5)
 
-The tool scans each HTML file in the present and unlisted lists for `<a href="...">` tags. Only local hyperlinks (relative paths or `file://` URLs) are processed. Each resolved target is classified:
+The tool scans each HTML file in the present and unlisted lists for `<a href="...">` tags. External protocols (`http://`, `https://`, `ftp://`, `mailto:`, `javascript:`, `data:`) and fragment-only links (`#...`) are skipped. Trailing `#fragment` anchors are stripped from local links. Each resolved target is classified:
 - If already in the present, missing, or unlisted lists, it is skipped.
+- Malformed local URLs (e.g. `"."`, `".."`, or URLs ending in special characters like `\`, `/`, `:`, `*`, `?`, `"`, `<`, `>`, `|`) are added to the invalid list.
 - Otherwise, the tool checks whether the file exists on disk: existing files are added to the unlisted list, non-existing to the missing list.
 
 ## Notes
 
 - All file comparisons are case-insensitive.
-- Duplicate entries are deduplicated across all three categories.
-- If no `.hhc` file is found, only the HHP phase runs.
-- If no `.hhk` file is found, only the HHP and HHC phases run.
+- Duplicate entries are deduplicated across all four categories.
+- The HHC and HHK file paths are read from the `[OPTIONS]` section of the `.hhp` file. If either is not specified, the corresponding phase is skipped.
 - Hyperlink validation (Steps 4-5) only processes files with `.html` or `.htm` extensions.
 - Hyperlinks are extracted via simple string scanning; complex or malformed HTML may produce false positives.
+- Malformed local URLs (e.g. `"."`, `".."`, or URLs ending in `\`, `/`, `:`, `*`, `?`, `"`, `<`, `>`, `|`) are reported in the invalid category.
 - The program version is customizable via the `Version` constant in `main.go`.
 - The program name is customizable via the `ProgramName` constant in `main.go`.

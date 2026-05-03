@@ -110,7 +110,7 @@ func Step02_ProcessFile_HHC(hhcPath string) error {
 
 	items_processed := len(localRefs)
 
-	fmt.Printf("    %d files listed (+%d missing, +%d unlisted)\n\n", items_processed,
+	fmt.Printf("    %d files listed (+%d missing, +%d unlisted)\n", items_processed,
 		len(missing_list)-items_missing, len(unlisted_list)-items_unlisted)
 
 	return nil

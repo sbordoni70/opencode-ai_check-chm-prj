@@ -72,15 +72,8 @@ func extractHrefsFromFile(filePath string) ([]string, error) {
 		}
 
 		// add only if it's non-empty or meaningful
-		if (href != "") && (href != "..") && (href != ".") {
-			// try to filter and weird/invalid item
-			switch href[len(href)-1] {
-			case '\\', '/', ':', '*', '?', '"', '<', '>', '|':
-				continue
-			// is seems fine, add it to the list
-			default:
-				hrefs = append(hrefs, href)
-			}
+		if (href != "") && isLocalHref(href) {
+			hrefs = append(hrefs, href)
 		}
 	}
 
@@ -93,6 +86,24 @@ func verifyHref(href string, origin_dir string, origin_item string) bool {
 	if !isLocalHref(href) {
 		return true
 	}
+	// look for 'invalid' hrefs and add it in the missing list
+	bInvalidValue := false
+	if (href == "..") || (href == ".") {
+		bInvalidValue = true
+	} else {
+		// try to filter and weird/invalid item
+		switch href[len(href)-1] {
+		case '\\', '/', ':', '*', '?', '"', '<', '>', '|':
+			bInvalidValue = true
+		}
+	}
+	if bInvalidValue {
+		// add it to the invalid
+		list_invalid_addIfNew(href, origin_item)
+		// set it true because the client doesn't need to update the unlisted reference count
+		return true
+	}
+
 	// get the absolute hyperlink path...
 	href_full := filepath.Join(origin_dir, href)
 	// check if it really local link...
@@ -121,7 +132,7 @@ func verifyHref(href string, origin_dir string, origin_item string) bool {
 // extracts local hyperlinks, and checks each target against the present/missing/unlisted lists.
 // Targets not in any list are classified by checking disk existence.
 func Step04_PresentList_CheckHyperlinks() error {
-	fmt.Printf("Step 4 - checking hyperlinks in present HTML files...\n")
+	fmt.Printf("\nStep 4 - checking hyperlinks in present HTML files...\n")
 
 	itemsMissingBefore := len(missing_list)
 	itemsUnlistedBefore := len(unlisted_list)
@@ -155,7 +166,7 @@ func Step04_PresentList_CheckHyperlinks() error {
 		}
 	}
 
-	fmt.Printf("    %d hyperlinks checked (+%d missing, +%d unlisted)\n\n", totalHrefs,
+	fmt.Printf("    %d hyperlinks checked (+%d missing, +%d unlisted)\n", totalHrefs,
 		len(missing_list)-itemsMissingBefore, len(unlisted_list)-itemsUnlistedBefore)
 
 	return nil
@@ -165,7 +176,7 @@ func Step04_PresentList_CheckHyperlinks() error {
 // extracts local hyperlinks, and checks each target against the present/missing/unlisted lists.
 // Targets not in any list are classified by checking disk existence.
 func Step05_UnlistedList_CheckHyperlinks() error {
-	fmt.Printf("Step 5 - checking hyperlinks in unlisted HTML files...\n")
+	fmt.Printf("\nStep 5 - checking hyperlinks in unlisted HTML files...\n")
 
 	itemsMissingBefore := len(missing_list)
 	itemsUnlistedBefore := len(unlisted_list)
