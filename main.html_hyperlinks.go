@@ -7,9 +7,14 @@ import (
 	"strings"
 )
 
-// isLocalHref determines whether an href value is a local file reference.
+// It checks if a file has an .html or .htm extension (case-insensitive).
+func isHref_HTML_page(href string) bool {
+	return no_case_HasSuffix(href, ".html") || no_case_HasSuffix(href, ".htm")
+}
+
+// It determines whether an href value is a local file reference.
 // It returns false for empty strings, external protocols, and fragment-only links.
-func isLocalHref(href string) bool {
+func isHref_Local(href string) bool {
 	return !no_case_HasPrefix(href, "http://") &&
 		!no_case_HasPrefix(href, "https://") &&
 		!no_case_HasPrefix(href, "ftp://") &&
@@ -32,9 +37,6 @@ func extractHrefsFromFile(filePath string) ([]string, error) {
 
 	for {
 		aStart := no_case_SeekSubstring(content, "<a ")
-		if aStart == -1 {
-			aStart = no_case_SeekSubstring(content, "<A ")
-		}
 		if aStart == -1 {
 			break
 		}
@@ -61,7 +63,7 @@ func extractHrefsFromFile(filePath string) ([]string, error) {
 		href = strings.TrimSpace(href)
 
 		// skip any non-local hrefs
-		if !isLocalHref(href) {
+		if !isHref_Local(href) {
 			continue
 		}
 
@@ -72,7 +74,7 @@ func extractHrefsFromFile(filePath string) ([]string, error) {
 		}
 
 		// add only if it's non-empty or meaningful
-		if (href != "") && isLocalHref(href) {
+		if href != "" {
 			hrefs = append(hrefs, href)
 		}
 	}
@@ -82,50 +84,7 @@ func extractHrefsFromFile(filePath string) ([]string, error) {
 
 // verify href
 func verifyHref(href string, origin_dir string, origin_item string) bool {
-	// if it's not local, skip
-	if !isLocalHref(href) {
-		return true
-	}
-	// look for 'invalid' hrefs and add it in the missing list
-	bInvalidValue := false
-	if (href == "..") || (href == ".") {
-		bInvalidValue = true
-	} else {
-		// try to filter and weird/invalid item
-		switch href[len(href)-1] {
-		case '\\', '/', ':', '*', '?', '"', '<', '>', '|':
-			bInvalidValue = true
-		}
-	}
-	if bInvalidValue {
-		// add it to the invalid
-		list_invalid_addIfNew(href, origin_item)
-		// set it true because the client doesn't need to update the unlisted reference count
-		return true
-	}
-
-	// get the absolute hyperlink path...
-	href_full := filepath.Join(origin_dir, href)
-	// check if it really local link...
-	if !no_case_HasPrefix(href_full, project_dir) {
-		return true
-	}
-	// get the project relative href
-	href_rel := href_full[project_dir_len2:]
-
-	// is it already present in a list?
-	key := strings.ToLower(href_rel)
-	if presentSet[key] || missingSet[key] || unlistedSet[key] {
-		return true
-	}
-
-	// check and add to the proper list
-	if _, err := os.Stat(href_full); err == nil {
-		list_addIfNew(&unlisted_list, &unlistedSet, href_rel)
-	} else {
-		list_missing_addIfNew(href_rel, origin_item)
-	}
-	return false
+	return isHref_Local(href) && process_project_item_ref(href, origin_dir, origin_item)
 }
 
 // Step04_PresentList_CheckHyperlinks iterates over every HTML file in the present list,
@@ -139,11 +98,6 @@ func Step04_PresentList_CheckHyperlinks() error {
 	totalHrefs := 0
 
 	for _, item := range present_list {
-		// check file type by extension
-		ext := filepath.Ext(item)
-		if !no_case_IsEqual(ext, ".html") && !no_case_IsEqual(ext, ".htm") {
-			continue
-		}
 
 		// get the full path of this HTML file
 		item_full := item

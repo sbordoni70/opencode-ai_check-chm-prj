@@ -16,24 +16,44 @@ func no_case_areCharsEqual(chr1, chr2 uint) bool {
 
 // like strings.HasPrefix but with case-insensitive comparison and Unicode support.
 func no_case_HasPrefix(str, prefix string) bool {
+	return no_case_IsMatching(str, 0, prefix)
+}
+
+// like strings.HasSuffix but the comparison is done at the end of the string.
+func no_case_HasSuffix(str, suffix string) bool {
 	strLen := len(str)
-	prefixLen := len(prefix)
-	if prefixLen > strLen {
-		return false
-	}
-	for i := 0; i < prefixLen; i++ {
-		if !no_case_areCharsEqual(uint(str[i]), uint(prefix[i])) {
-			return false
-		}
-	}
-	return true
+	suffixLen := len(suffix)
+	return (suffixLen > 0) && (strLen > suffixLen) &&
+		no_case_IsMatching(str, strLen-suffixLen, suffix)
 }
 
 // like strings.EqualFold but with case-insensitive comparison and Unicode support.
 func no_case_IsEqual(str1, str2 string) bool {
 	str1Len := len(str1)
 	str2Len := len(str2)
-	return (str1Len == str2Len) && no_case_HasPrefix(str1, str2)
+	return (str1Len == str2Len) && no_case_IsMatching(str1, 0, str2)
+}
+
+// like strings.HasPrefix but with case-insensitive comparison and Unicode support.
+func no_case_IsMatching(str string, offset int, prefix string) bool {
+	// check offset
+	if offset < 0 {
+		return false
+	}
+	// get strings lengths
+	strLen := len(str)
+	prefixLen := len(prefix)
+	// check offset & prefix length
+	if (strLen <= offset) || (prefixLen > (strLen - offset)) {
+		return false
+	}
+	// compare chrs
+	for i := 0; i < prefixLen; i++ {
+		if !no_case_areCharsEqual(uint(str[offset+i]), uint(prefix[i])) {
+			return false
+		}
+	}
+	return true
 }
 
 // like strings.Index but with case-insensitive comparison and Unicode support.

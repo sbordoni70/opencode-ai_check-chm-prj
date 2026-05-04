@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 )
 
@@ -73,7 +72,10 @@ func parse_HHK_object_param_Local(hhkPath string) ([]string, error) {
 // A reference that exists on disk but isn't in the HHP [FILES] list is marked unlisted.
 // A reference that doesn't exist on disk is marked missing.
 func Step03_ProcessFile_HHK(hhkPath string) error {
+	// output test header
 	fmt.Printf("Step 3 - importing HHK file and checking the listed files...\n")
+
+	// extract local references from HHK
 	localRefs, err := parse_HHK_object_param_Local(hhkPath)
 	if err != nil {
 		return fmt.Errorf("cannot parse %s: %w", hhkPath, err)
@@ -82,26 +84,8 @@ func Step03_ProcessFile_HHK(hhkPath string) error {
 	items_missing := len(missing_list)
 	items_unlisted := len(unlisted_list)
 
-	hhkDir := filepath.Dir(hhkPath)
-
 	for _, item := range localRefs {
-		// if it's in the present set,... no need to check anything
-		if presentSet[strings.ToLower(item)] {
-			continue
-		}
-
-		// else we need to understand where to put it
-		fullPath := item
-		if !filepath.IsAbs(item) {
-			fullPath = filepath.Join(hhkDir, item)
-		}
-
-		_, statErr := os.Stat(fullPath)
-		if statErr != nil {
-			list_missing_addIfNew(item, ".HHK")
-		} else {
-			list_addIfNew(&unlisted_list, &unlistedSet, item)
-		}
+		process_project_item_ref(item, project_dir, ".HHK")
 	}
 
 	items_processed := len(localRefs)

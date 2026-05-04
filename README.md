@@ -6,17 +6,17 @@ A command-line tool that validates Microsoft HTML Help Workshop project files by
 
 The tool performs a five-phase audit of a CHM help project directory:
 
-1. **HHP Analysis** — Parses the `[FILES]` section of the `.hhp` project file and verifies that every listed file exists on disk.
-2. **HHC Analysis** — Reads the HHC file path from the HHP `[OPTIONS]` section, parses the table-of-contents file, extracts all `name="local"` references from `<object>` tags, and cross-references them against the HHP manifest.
-3. **HHK Analysis** — Reads the HHK file path from the HHP `[OPTIONS]` section, parses the index file, extracts all `name="local"` references from `<object>` tags (including multiple references per object), and cross-references them against the HHP manifest.
-4. **Hyperlink Validation (Present)** — Extracts all local hyperlinks from every HTML file in the present list, resolves them against the manifest, and classifies unknown targets by checking disk existence.
+1. **HHP Analysis** — Parses the `[FILES]` section of the `.hhp` project file and verifies that every listed file exists on disk. Non-HTML files (e.g. images) are classified as invalid references.
+2. **HHC Analysis** — Reads the HHC file path from the HHP `[OPTIONS]` section, parses the table-of-contents file, extracts all `name="local"` references from `<object>` tags, and cross-references them against the HHP manifest using unified reference processing.
+3. **HHK Analysis** — Reads the HHK file path from the HHP `[OPTIONS]` section, parses the index file, extracts all `name="local"` references from `<object>` tags (including multiple references per object), and cross-references them against the HHP manifest using unified reference processing.
+4. **Hyperlink Validation (Present)** — Extracts all local hyperlinks from every file in the present list, resolves them against the manifest, and classifies unknown targets by checking disk existence.
 5. **Hyperlink Validation (Unlisted)** — Repeats hyperlink extraction on every file in the unlisted list, discovering additional missing or unlisted files transitively.
 
 At the end it produces a final report with four categories:
 - **Present** — files listed in the HHP and found on disk
 - **Missing** — files referenced but not found on disk (each entry shows the source file that references it)
 - **Unlisted** — files found on disk and referenced in the HHC, HHK, or HTML hyperlinks, but missing from the HHP `[FILES]` section
-- **Invalid** — malformed local URLs (e.g. `"."`, `".."`, or URLs ending in special characters)
+- **Invalid** — malformed local URLs (e.g. `"."`, `".."`, URLs ending in special characters) and non-HTML file references (e.g. images, PDFs)
 
 ## Building
 
@@ -45,7 +45,7 @@ The tool will recursively search `<project-folder>` for a `.hhp` file. The `.hhc
 ### Example Output
 
 ```
-check-chm-prj v2026.05.4.1
+check-chm-prj v2026.05.5.0
   a small utility to check & report HTML files references problems in CHM project
 
 -project dir:  "C:\help"
@@ -125,17 +125,17 @@ The tool reads the `[OPTIONS]` section of the `.hhp` file to locate the `content
 
 ### HHC (`name="local"` references)
 
-The tool scans the `.hhc` file for `<object>` blocks and extracts the `value` attribute from the first `<param name="local" value="...">` tag found per block. Trailing `#fragment` anchors are stripped. These values are treated as file paths and resolved relative to the HHC file's directory. Files existing on disk but not in the HHP manifest are added to the unlisted set.
+The tool scans the `.hhc` file for `<object>` blocks and extracts the `value` attribute from the first `<param name="local" value="...">` tag found per block. Trailing `#fragment` anchors are stripped. These values are treated as file paths and resolved relative to the project directory. Each reference is processed through a unified function that classifies it as invalid (non-HTML), missing, unlisted, or already known.
 
 ### HHK (`name="local"` references)
 
-The tool scans the `.hhk` file for `<object>` blocks and extracts the `value` attribute from **all** `<param name="local" value="...">` tags within each block. A single object may reference multiple files. Trailing `#fragment` anchors are stripped. These values are treated as file paths and resolved relative to the HHK file's directory.
+The tool scans the `.hhk` file for `<object>` blocks and extracts the `value` attribute from **all** `<param name="local" value="...">` tags within each block. A single object may reference multiple files. Trailing `#fragment` anchors are stripped. These values are treated as file paths and resolved relative to the project directory. Each reference is processed through the same unified function as HHC references.
 
 ### HTML Hyperlinks (Steps 4-5)
 
-The tool scans each HTML file in the present and unlisted lists for `<a href="...">` tags. External protocols (`http://`, `https://`, `ftp://`, `mailto:`, `javascript:`, `data:`) and fragment-only links (`#...`) are skipped. Trailing `#fragment` anchors are stripped from local links. Each resolved target is classified:
-- If already in the present, missing, or unlisted lists, it is skipped.
-- Malformed local URLs (e.g. `"."`, `".."`, or URLs ending in special characters like `\`, `/`, `:`, `*`, `?`, `"`, `<`, `>`, `|`) are added to the invalid list.
+The tool scans each file in the present and unlisted lists for `<a href="...">` tags. External protocols (`http://`, `https://`, `ftp://`, `mailto:`, `javascript:`, `data:`) and fragment-only links (`#...`) are skipped. Trailing `#fragment` anchors are stripped from local links. Each resolved target is classified using the same unified reference processing as Steps 1-3:
+- Non-HTML file references are added to the invalid list.
+- If already in the present, missing, or unlisted lists, the reference is skipped.
 - Otherwise, the tool checks whether the file exists on disk: existing files are added to the unlisted list, non-existing to the missing list.
 
 ## Notes
@@ -143,8 +143,8 @@ The tool scans each HTML file in the present and unlisted lists for `<a href="..
 - All file comparisons are case-insensitive.
 - Duplicate entries are deduplicated across all four categories.
 - The HHC and HHK file paths are read from the `[OPTIONS]` section of the `.hhp` file. If either is not specified, the corresponding phase is skipped.
-- Hyperlink validation (Steps 4-5) only processes files with `.html` or `.htm` extensions.
+- All five steps use a unified reference processing function for consistent classification of project items.
+- Non-HTML file references (e.g. images, PDFs) are reported in the invalid category.
 - Hyperlinks are extracted via simple string scanning; complex or malformed HTML may produce false positives.
-- Malformed local URLs (e.g. `"."`, `".."`, or URLs ending in `\`, `/`, `:`, `*`, `?`, `"`, `<`, `>`, `|`) are reported in the invalid category.
 - The program version is customizable via the `Version` constant in `main.go`.
 - The program name is customizable via the `ProgramName` constant in `main.go`.

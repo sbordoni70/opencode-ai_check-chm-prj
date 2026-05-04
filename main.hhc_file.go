@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 )
 
@@ -70,11 +69,14 @@ func parse_HHC_object_param_Local(hhcPath string) ([]string, error) {
 	return refs, nil
 }
 
-// Step02_ProcessFile_HHC checks every file referenced in the HHC table-of-contents.
+// It checks every file referenced in the HHC table-of-contents.
 // A reference that exists on disk but isn't in the HHP [FILES] list is marked unlisted.
 // A reference that doesn't exist on disk is marked missing.
 func Step02_ProcessFile_HHC(hhcPath string) error {
+	// output test header
 	fmt.Printf("Step 2 - importing HHC file and checking the listed files...\n")
+
+	// extract local references from HHC
 	localRefs, err := parse_HHC_object_param_Local(hhcPath)
 	if err != nil {
 		return fmt.Errorf("cannot parse %s: %w", hhcPath, err)
@@ -84,28 +86,8 @@ func Step02_ProcessFile_HHC(hhcPath string) error {
 	items_missing := len(missing_list)
 	items_unlisted := len(unlisted_list)
 
-	hhcDir := filepath.Dir(hhcPath)
-
-	for _, ref := range localRefs {
-		fullPath := ref
-		if !filepath.IsAbs(ref) {
-			fullPath = filepath.Join(hhcDir, ref)
-		}
-
-		// Compute path relative to the HHC directory for cross-comparison with HHP list
-		relPath, err := filepath.Rel(hhcDir, fullPath)
-		if err != nil {
-			relPath = ref
-		}
-
-		_, statErr := os.Stat(fullPath)
-		if statErr != nil {
-			// File doesn't exist on disk
-			list_missing_addIfNew(ref, ".HHC")
-		} else if !presentSet[strings.ToLower(relPath)] {
-			// File exists but wasn't listed in the HHP [FILES] section
-			list_addIfNew(&unlisted_list, &unlistedSet, relPath)
-		}
+	for _, item := range localRefs {
+		process_project_item_ref(item, project_dir, ".HHC")
 	}
 
 	items_processed := len(localRefs)

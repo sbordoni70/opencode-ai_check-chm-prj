@@ -10,7 +10,7 @@ import (
 
 const (
 	ProgramName = "check-chm-prj"
-	Version     = "2026.05.4.1"
+	Version     = "2026.05.5.0"
 )
 
 // Global tracking lists and dedup sets for three categories of files.
@@ -31,19 +31,27 @@ var (
 
 // list_addIfNew appends an item to a list only if it hasn't been seen before (case-insensitive).
 func list_addIfNew(list *[]string, set *map[string]bool, item string) bool {
+	// check if it's already present in the set (case-insensitive)
 	key := strings.ToLower(item)
 	if (*set)[key] {
 		return false
 	}
+	// append it
 	(*set)[key] = true
 	*list = append(*list, item)
 	return true
 }
 
 // like list_addIfNew but for missing list only
-func list_invalid_addIfNew(item string, ref string) {
-	invalid_list = append(invalid_list, item)
-	invalid_ref_list = append(invalid_ref_list, ref)
+func list_addIfInvalid(item string, ref string) bool {
+	// check if it's an html page
+	if isHref_HTML_page(item) {
+		return false
+	}
+	// add it to invalid list
+	invalid_list = append(invalid_list, (item))
+	invalid_ref_list = append(invalid_ref_list, (ref))
+	return true
 }
 
 // like list_addIfNew but for missing list only
@@ -51,6 +59,42 @@ func list_missing_addIfNew(item string, ref string) {
 	if list_addIfNew(&missing_list, &missingSet, item) {
 		missing_ref_list = append(missing_ref_list, ref)
 	}
+}
+
+// check a generic project item reference (without anchor)
+func process_project_item_ref(item, origin_dir, origin_item string) bool {
+	// check if it's an invalid reference (e.g. non-html file)
+	if list_addIfInvalid(item, origin_item) {
+		return true
+	}
+	// Compute path relative to the HHC directory for cross-comparison with HHP list
+	item_fullPath := item
+	if !filepath.IsAbs(item) {
+		item_fullPath = filepath.Join(origin_dir, item)
+	}
+	// check if it really local reference...
+	if !no_case_HasPrefix(item_fullPath, project_dir) {
+		return true
+	}
+	// get the project relative href
+	item_rel := item_fullPath[project_dir_len2:]
+	// is it already present in one of the target lists?
+	key := strings.ToLower(item_rel)
+	if missingSet[key] || unlistedSet[key] || presentSet[key] {
+		return true
+	}
+	ret := true
+	// check if it exists on disk
+	_, statErr := os.Stat(item_fullPath)
+	if statErr != nil {
+		// File doesn't exist on disk
+		list_missing_addIfNew(item_rel, origin_item)
+		// if it isn't present in the project listed files...
+	} else if list_addIfNew(&unlisted_list, &unlistedSet, item_rel) {
+		// if added to unlisted, return false
+		ret = false
+	}
+	return ret
 }
 
 // OutputFinalReport prints a summary of all three file categories.
@@ -93,7 +137,9 @@ func OutputFinalReport() {
 func main() {
 
 	// print program header
-	fmt.Fprintf(os.Stderr, "\n%s v%s\n  a small utility to check & report HTML files references problems in CHM project\n\n", ProgramName, Version)
+	fmt.Fprintf(os.Stderr,
+		"\n%s v%s\n  a small utility to check & report HTML files references problems in CHM project\n\n",
+		ProgramName, Version)
 
 	if len(os.Args) < 2 {
 		fmt.Fprintf(os.Stderr, "  Usage: %s <project-folder>\n", ProgramName)
@@ -114,6 +160,7 @@ func main() {
 	// let's go
 	fmt.Fprintf(os.Stderr, "-project dir:  \"%s\"\n\n", project_dir)
 
+	// check project dir
 	if _, err := os.Stat(project_dir); os.IsNotExist(err) {
 		fmt.Fprintf(os.Stderr, "Error: directory %s does not exist\n", project_dir)
 		os.Exit(1)

@@ -1,10 +1,10 @@
 {
   "project": "check-chm-prj",
-  "version": "2026.05.4.1",
+  "version": "2026.05.5.0",
   "language": "Go",
-  "description": "CLI tool that validates Microsoft HTML Help Workshop (.hhp/.hhc/.hhk) project files by checking for missing source files, files referenced outside the project manifest, and broken hyperlinks within HTML files.",
+  "description": "CLI tool that validates Microsoft HTML Help Workshop (.hhp/.hhc/.hhk) project files by checking for missing source files, files referenced outside the project manifest, broken hyperlinks, non-HTML file references, and malformed local URLs.",
   "last_session": "2026-05-03T00:00:00Z",
-  "status": "build passes, four-step validation (HHP, HHC, HHK, HTML hyperlinks), case-insensitive string helpers, invalid URL detection",
+  "status": "build passes, five-step validation (HHP, HHC, HHK, HTML hyperlinks present + unlisted), unified reference processing, non-HTML file detection, case-insensitive string helpers, invalid URL detection",
   "conventions": {
     "naming": "Functions use snake_case with underscores for multi-word names (e.g. parse_HHP_section_FILES, Step01_ProcessFile_HHP, isLocalHref, extractHrefsFromFile)",
     "file_structure": "main.go + main.hhp_file.go + main.hhc_file.go + main.hhk_file.go + main.html_hyperlinks.go + main.strings_no_case.go, no packages beyond stdlib",
@@ -42,7 +42,14 @@
     "Added invalid/malformed URL tracking (invalid_list, invalid_ref_list, list_invalid_addIfNew) for detecting broken href values like '.', '..', or URLs ending in invalid characters",
     "Added verifyHref function to centralize hyperlink validation logic with invalid URL detection",
     "Split codebase into modular files: main.hhp_file.go, main.hhc_file.go, main.hhk_file.go, main.html_hyperlinks.go, main.strings_no_case.go",
-    "Hardcoded project_dir to v:\\work\\0-git\\WinEPTS Tech. Ref (command-line argument commented out)"
+    "Hardcoded project_dir to v:\\work\\0-git\\WinEPTS Tech. Ref (command-line argument commented out)",
+    "Added no_case_HasSuffix helper for case-insensitive suffix matching",
+    "Refactored no_case_HasPrefix to use new no_case_IsMatching core function",
+    "Created process_project_item_ref() as unified reference processor for all project items",
+    "Step01 (HHP) now classifies non-HTML files (images, etc.) as invalid references",
+    "Steps 02-03 (HHC/HHK) refactored to use process_project_item_ref instead of inline logic",
+    "Step04 hyperlink validation refactored: removed HTML-only filter, uses isHref_HTML_page + isHref_Local + process_project_item_ref",
+    "All five steps now share consistent reference classification via unified processing function"
   ],
   "files": {
     "source": [
@@ -61,6 +68,6 @@
     "present": "files listed in HHP [FILES] and found on disk",
     "missing": "files referenced (HHP/HHC/HHK/HTML hyperlinks) but not found on disk",
     "unlisted": "files found on disk and referenced in HHC/HHK/HTML hyperlinks but missing from HHP [FILES] section",
-    "invalid": "malformed or invalid local URL values (e.g. '.', '..', trailing special characters)"
+    "invalid": "malformed or invalid local URL values (e.g. '.', '..', trailing special characters) and non-HTML file references (e.g. images, PDFs)"
   }
 }

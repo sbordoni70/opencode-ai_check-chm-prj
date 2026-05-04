@@ -109,20 +109,30 @@ func parse_HHP_section_FILES(hhpPath string) ([]string, error) {
 	return files, nil
 }
 
-// Step01_ProcessFile_HHP checks every file listed in the HHP [FILES] section
+// It checks every file listed in the HHP [FILES] section
 // and classifies each as present (found on disk) or missing.
 func Step01_ProcessFile_HHP(hhpPath string) error {
+	// output test header
 	fmt.Printf("Step 1 - importing HHP file and checking the listed files...\n")
+
+	// extract listed files
 	files, err := parse_HHP_section_FILES(hhpPath)
 	if err != nil {
 		return fmt.Errorf("cannot parse %s: %w", hhpPath, err)
 	}
 
+	// process them
 	for _, item := range files {
+		// if invalid...
+		if list_addIfInvalid(item, ".HHP") {
+			continue
+		}
+		// get full pathname
 		fullPath := item
 		if !filepath.IsAbs(item) {
 			fullPath = filepath.Join(project_dir, item)
 		}
+		// check if it exists on disk and add to the proper list
 		if _, err := os.Stat(fullPath); err == nil {
 			list_addIfNew(&present_list, &presentSet, item)
 		} else {
@@ -131,7 +141,8 @@ func Step01_ProcessFile_HHP(hhpPath string) error {
 	}
 
 	total := len(present_list) + len(missing_list)
-	fmt.Printf("    %d files listed (%d present, %d missing)\n", total, len(present_list), len(missing_list))
+	fmt.Printf("    %d files listed (%d present, %d missing)\n",
+		total, len(present_list), len(missing_list))
 
 	return nil
 }
