@@ -23,7 +23,7 @@ func no_case_HasPrefix(str, prefix string) bool {
 func no_case_HasSuffix(str, suffix string) bool {
 	strLen := len(str)
 	suffixLen := len(suffix)
-	return (suffixLen > 0) && (strLen > suffixLen) &&
+	return (suffixLen > 0) && (strLen >= suffixLen) &&
 		no_case_IsMatching(str, strLen-suffixLen, suffix)
 }
 
@@ -57,22 +57,21 @@ func no_case_IsMatching(str string, offset int, prefix string) bool {
 }
 
 // like strings.Index but with case-insensitive comparison and Unicode support.
-func no_case_SeekSubstring(str, substr string) int {
-
+func no_case_SeekSubstring(str string, offset int, substr string) int {
 	// get & check substring length
 	substrLen := len(substr)
 	if substrLen == 0 {
-		return 0
+		return -1
 	}
 	// get string length
 	strLen := len(str)
 	// if substring is longer than string, it can't be found
-	if (strLen == 0) || (substrLen > strLen) {
+	if (strLen <= 0) || (offset >= strLen) || (substrLen > (strLen - offset)) {
 		return -1
 	}
 	// iterate over string and compare with substring
 	strLen -= substrLen
-	for i := 0; i <= strLen; i++ {
+	for i := offset; i <= strLen; i++ {
 		match := true
 		for j := 0; j < substrLen; j++ {
 			if !no_case_areCharsEqual(uint(str[i+j]), uint(substr[j])) {
@@ -82,7 +81,7 @@ func no_case_SeekSubstring(str, substr string) int {
 		}
 		// return index if a match is found
 		if match {
-			return i
+			return i - offset
 		}
 	}
 	return -1

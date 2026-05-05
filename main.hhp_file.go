@@ -46,7 +46,8 @@ func parse_HHP_section_OPTIONS(hhpPath string, entry string) (string, error) {
 		line := strings.TrimSpace(scanner.Text())
 
 		// look for the need section...
-		if line[0] == '[' {
+		len := len(line)
+		if (len >= 3) && no_case_HasPrefix(line, "[") {
 			inOptions = no_case_IsEqual(line, "[OPTIONS]")
 		}
 		if inOptions {
@@ -56,7 +57,7 @@ func parse_HHP_section_OPTIONS(hhpPath string, entry string) (string, error) {
 			}
 			prefix := entry + "="
 			if no_case_HasPrefix(line, prefix) {
-				idx := no_case_SeekSubstring(line, "=")
+				idx := no_case_SeekSubstring(line, 0, "=")
 				val := strings.TrimSpace(line[idx+1:])
 				return val, nil
 			}
@@ -67,7 +68,7 @@ func parse_HHP_section_OPTIONS(hhpPath string, entry string) (string, error) {
 		return "", fmt.Errorf("error reading %s: %w", hhpPath, err)
 	}
 
-	return "", fmt.Errorf("no Contents file entry found in [OPTIONS] section of %s", hhpPath)
+	return "", fmt.Errorf("no '%s' entry found in [OPTIONS] section of %s", entry, hhpPath)
 }
 
 // parse_HHP_section_FILES reads the [FILES] block and returns every non-comment line.

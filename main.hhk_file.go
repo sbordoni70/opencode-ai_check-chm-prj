@@ -19,12 +19,12 @@ func parse_HHK_object_param_Local(hhkPath string) ([]string, error) {
 	content := string(data)
 
 	for {
-		objStart := no_case_SeekSubstring(content, "<OBJECT ")
+		objStart := no_case_SeekSubstring(content, 0, "<OBJECT ")
 		if objStart == -1 {
 			break
 		}
 
-		objEnd := no_case_SeekSubstring(content[objStart:], "</OBJECT>")
+		objEnd := no_case_SeekSubstring(content, objStart, "</OBJECT>")
 		if objEnd == -1 {
 			break
 		}
@@ -36,7 +36,7 @@ func parse_HHK_object_param_Local(hhkPath string) ([]string, error) {
 		// Collect ALL name="local" params within this object block
 		for {
 			// seek the correct param tag
-			index := no_case_SeekSubstring(objBlock[offset:], `<param name="local" value="`)
+			index := no_case_SeekSubstring(objBlock, offset, `<param name="Local" value="`)
 			if index == -1 {
 				break
 			}
@@ -44,15 +44,14 @@ func parse_HHK_object_param_Local(hhkPath string) ([]string, error) {
 			// update offset to the start of this param tag for the next iteration
 			offset += index + len(`<param name="Local" value="`)
 			// update offset to the start of the actual value after value=""
-			index = no_case_SeekSubstring(objBlock[offset:], `">`)
+			index = no_case_SeekSubstring(objBlock, offset, `">`)
 			if index == -1 {
 				continue
 			}
 
 			// extract the value and strip trailing fragment if any
-			ref := objBlock[offset : offset+index]
-			ref = strings.TrimSpace(ref)
-			idx := no_case_SeekSubstring(ref, "#")
+			ref := strings.TrimSpace(objBlock[offset : offset+index])
+			idx := no_case_SeekSubstring(ref, 0, "#")
 			if idx != -1 {
 				ref = ref[:idx]
 			}

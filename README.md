@@ -1,6 +1,6 @@
 # check-chm-prj
 
-A command-line tool that validates Microsoft HTML Help Workshop project files by checking for missing source files, files referenced outside the project manifest, broken hyperlinks within HTML files, and malformed local URLs.
+A command-line tool that validates Microsoft HTML Help Workshop project files by checking for missing source files, files referenced outside the project manifest, and broken hyperlinks within HTML files.
 
 ## What It Does
 
@@ -16,7 +16,7 @@ At the end it produces a final report with four categories:
 - **Present** — files listed in the HHP and found on disk
 - **Missing** — files referenced but not found on disk (each entry shows the source file that references it)
 - **Unlisted** — files found on disk and referenced in the HHC, HHK, or HTML hyperlinks, but missing from the HHP `[FILES]` section
-- **Invalid** — malformed local URLs (e.g. `"."`, `".."`, URLs ending in special characters) and non-HTML file references (e.g. images, PDFs)
+- **Invalid** — non-HTML file references (e.g. images, PDFs)
 
 ## Building
 
@@ -38,14 +38,13 @@ The tool will recursively search `<project-folder>` for a `.hhp` file. The `.hhc
 
 | Code | Meaning |
 |------|---------|
-| 0    | All files accounted for |
+| 0    | Check completed (regardless of findings) |
 | 1    | Usage error or missing project files |
-| 2    | One or more files are missing |
 
 ### Example Output
 
 ```
-check-chm-prj v2026.05.5.0
+check-chm-prj v2026.05.5.1
   a small utility to check & report HTML files references problems in CHM project
 
 -project dir:  "C:\help"
@@ -103,13 +102,6 @@ hidden_page.html
 known_issues.html
 legacy_v1.html
 
----- invalid/malformed local URLs: 2
-".."
- > from: old_page.html
-"."
- > from: deprecated_api.html
-
-
 ============================================================
 ```
 
@@ -137,14 +129,18 @@ The tool scans each file in the present and unlisted lists for `<a href="...">` 
 - Non-HTML file references are added to the invalid list.
 - If already in the present, missing, or unlisted lists, the reference is skipped.
 - Otherwise, the tool checks whether the file exists on disk: existing files are added to the unlisted list, non-existing to the missing list.
+- In Step 5, newly discovered unlisted HTML files are dynamically added to the scan queue, so hyperlinks within them are also checked.
 
 ## Notes
 
 - All file comparisons are case-insensitive.
 - Duplicate entries are deduplicated across all four categories.
+- The tool searches for the first `.hhp` file in the project directory and stops at the first match.
 - The HHC and HHK file paths are read from the `[OPTIONS]` section of the `.hhp` file. If either is not specified, the corresponding phase is skipped.
-- All five steps use a unified reference processing function for consistent classification of project items.
+- Steps 2-5 use a unified reference processing function for consistent classification of project items.
 - Non-HTML file references (e.g. images, PDFs) are reported in the invalid category.
+- Step 5 dynamically expands: when a hyperlink in an unlisted file reveals another unlisted HTML file, that file's hyperlinks are also checked.
+- If an HTML file cannot be read during Steps 4-5, a warning is printed and the file is skipped.
 - Hyperlinks are extracted via simple string scanning; complex or malformed HTML may produce false positives.
 - The program version is customizable via the `Version` constant in `main.go`.
 - The program name is customizable via the `ProgramName` constant in `main.go`.

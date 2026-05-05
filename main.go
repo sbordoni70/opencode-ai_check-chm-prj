@@ -10,7 +10,7 @@ import (
 
 const (
 	ProgramName = "check-chm-prj"
-	Version     = "2026.05.5.0"
+	Version     = "2026.05.5.1"
 )
 
 // Global tracking lists and dedup sets for three categories of files.

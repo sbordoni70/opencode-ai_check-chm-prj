@@ -36,31 +36,30 @@ func extractHrefsFromFile(filePath string) ([]string, error) {
 	content := string(data)
 
 	for {
-		aStart := no_case_SeekSubstring(content, "<a ")
+		aStart := no_case_SeekSubstring(content, 0, "<a ")
 		if aStart == -1 {
 			break
 		}
 
-		aEnd := no_case_SeekSubstring(content[aStart:], ">")
+		aEnd := no_case_SeekSubstring(content, aStart, ">")
 		if aEnd == -1 {
 			break
 		}
 		aTag := content[aStart : aStart+aEnd]
 		content = content[aStart+aEnd:]
 
-		hrefIdx := no_case_SeekSubstring(aTag, `href="`)
+		hrefIdx := no_case_SeekSubstring(aTag, 0, `href="`)
 		if hrefIdx == -1 {
 			continue
 		}
 
 		valueStart := hrefIdx + len(`href="`)
-		valueEnd := no_case_SeekSubstring(aTag[valueStart:], `"`)
+		valueEnd := no_case_SeekSubstring(aTag, valueStart, `"`)
 		if valueEnd == -1 {
 			continue
 		}
 
-		href := aTag[valueStart : valueStart+valueEnd]
-		href = strings.TrimSpace(href)
+		href := strings.TrimSpace(aTag[valueStart : valueStart+valueEnd])
 
 		// skip any non-local hrefs
 		if !isHref_Local(href) {
@@ -68,7 +67,7 @@ func extractHrefsFromFile(filePath string) ([]string, error) {
 		}
 
 		// remove any trailing #fragment
-		idx := no_case_SeekSubstring(href, "#")
+		idx := no_case_SeekSubstring(href, 0, "#")
 		if idx != -1 {
 			href = href[:idx]
 		}
@@ -80,11 +79,6 @@ func extractHrefsFromFile(filePath string) ([]string, error) {
 	}
 
 	return hrefs, nil
-}
-
-// verify href
-func verifyHref(href string, origin_dir string, origin_item string) bool {
-	return isHref_Local(href) && process_project_item_ref(href, origin_dir, origin_item)
 }
 
 // Step04_PresentList_CheckHyperlinks iterates over every HTML file in the present list,
@@ -116,7 +110,7 @@ func Step04_PresentList_CheckHyperlinks() error {
 		item_dir := filepath.Dir(item_full)
 		for _, item_hr := range hrefs {
 			totalHrefs++
-			verifyHref(item_hr, item_dir, item)
+			process_project_item_ref(item_hr, item_dir, item)
 		}
 	}
 
@@ -163,7 +157,7 @@ func Step05_UnlistedList_CheckHyperlinks() error {
 		item_dir := filepath.Dir(item_full)
 		for _, item_hr := range hrefs {
 			totalHrefs++
-			if !verifyHref(item_hr, item_dir, item) {
+			if !process_project_item_ref(item_hr, item_dir, item) {
 				bUpdateMaxItems = true
 			}
 		}

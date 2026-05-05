@@ -6,8 +6,9 @@ import (
 	"strings"
 )
 
-// parse_HHC_object_param_Local extracts every value="..." from <param name="Local" value="...">
-// inside <OBJECT> blocks of the HHC file, and strips any trailing #fragment anchor.
+// parse_HHC_object_param_Local extracts value="..." from
+// <param name="Local" value="..."> inside <OBJECT> blocks of the HHC file,
+// and strips any trailing #fragment anchor.
 func parse_HHC_object_param_Local(hhcPath string) ([]string, error) {
 	f, err := os.Open(hhcPath)
 	if err != nil {
@@ -25,12 +26,12 @@ func parse_HHC_object_param_Local(hhcPath string) ([]string, error) {
 
 	// Iterate over every <OBJECT ... </OBJECT> block
 	for {
-		objStart := no_case_SeekSubstring(content, "<OBJECT")
+		objStart := no_case_SeekSubstring(content, 0, "<OBJECT")
 		if objStart == -1 {
 			break
 		}
 
-		objEnd := no_case_SeekSubstring(content[objStart:], "</OBJECT>")
+		objEnd := no_case_SeekSubstring(content, objStart, "</OBJECT>")
 		if objEnd == -1 {
 			break
 		}
@@ -39,7 +40,7 @@ func parse_HHC_object_param_Local(hhcPath string) ([]string, error) {
 		content = content[objEnd:]
 
 		// Look for a <param tag inside this object block
-		offset := no_case_SeekSubstring(objBlock, `<param name="Local" value="`)
+		offset := no_case_SeekSubstring(objBlock, 0, `<param name="Local" value="`)
 		if offset == -1 {
 			continue
 		}
@@ -47,16 +48,15 @@ func parse_HHC_object_param_Local(hhcPath string) ([]string, error) {
 		// update offset to the start of this param tag for the next search
 		offset += len(`<param name="Local" value="`)
 		// get value end quote position
-		index := no_case_SeekSubstring(objBlock[offset:], `">`)
+		index := no_case_SeekSubstring(objBlock, offset, `">`)
 		if index == -1 {
 			continue
 		}
 
 		// extract the value and strip trailing fragment if any
-		ref := objBlock[offset : offset+index]
-		ref = strings.TrimSpace(ref)
+		ref := strings.TrimSpace(objBlock[offset : offset+index])
 		// Strip trailing fragment anchor (e.g. "page.html#section" -> "page.html")
-		idx := no_case_SeekSubstring(ref, "#")
+		idx := no_case_SeekSubstring(ref, 0, "#")
 		if idx != -1 {
 			ref = ref[:idx]
 		}
@@ -76,7 +76,7 @@ func Step02_ProcessFile_HHC(hhcPath string) error {
 	// output test header
 	fmt.Printf("Step 2 - importing HHC file and checking the listed files...\n")
 
-	// extract local references from HHC
+	// extract local references from HHC objects
 	localRefs, err := parse_HHC_object_param_Local(hhcPath)
 	if err != nil {
 		return fmt.Errorf("cannot parse %s: %w", hhcPath, err)
